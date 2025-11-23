@@ -1,10 +1,11 @@
+
 import React, { useState, useMemo } from 'react';
 import { ActivityLog, OperationalPhase, AppSettings, HotspotLog } from '../types';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell, ComposedChart, Line, Area
 } from 'recharts';
-import { LayoutDashboard, Filter, Calendar, ChevronDown, ArrowUp, ArrowDown, Minus } from 'lucide-react';
+import { LayoutDashboard, Filter, Calendar, ChevronDown, ArrowUp, ArrowDown, Minus, X } from 'lucide-react';
 
 interface PresentationViewProps {
   activities: ActivityLog[];
@@ -28,6 +29,8 @@ const COLORS = {
 const CHART_COLORS = ['#0f766e', '#14b8a6', '#0d9488', '#5eead4', '#1e293b', '#64748b'];
 
 export const PresentationView: React.FC<PresentationViewProps> = ({ activities, hotspotLogs, settings }) => {
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+
   // --- Filters ---
   const [selectedPhase, setSelectedPhase] = useState<string>('ALL');
   const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
@@ -63,8 +66,6 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
     };
 
     // 3. Previous Period Stats (Simple Month-over-Month Logic if Month Selected)
-    // If ALL time is selected, "Previous" doesn't make much sense, so we use 0 to show all growth or just hide.
-    // For simplicity, let's try to find previous month data if a specific month is selected.
     let prevMissions = 0;
     let prevArea = 0;
     let prevPersonnel = 0;
@@ -91,15 +92,14 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
     }
 
     const calcTrend = (curr: number, prev: number) => {
-        if (prev === 0) return { val: 100, dir: 'up' }; // Assume 100% growth if start from 0
+        if (prev === 0) return { val: 100, dir: 'up' }; 
         const diff = curr - prev;
         const pct = (diff / prev) * 100;
         return { val: Math.abs(pct), dir: diff >= 0 ? 'up' : 'down' };
     };
 
     // 4. Charts Data Preparation
-    
-    // Top Activities (Horizontal Bar)
+    // Top Activities
     const catCounts: Record<string, number> = {};
     filtered.forEach(a => { catCounts[a.category] = (catCounts[a.category] || 0) + 1; });
     const topActivitiesData = Object.keys(catCounts)
@@ -107,7 +107,7 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
         .sort((a, b) => b.value - a.value)
         .slice(0, 5);
 
-    // Damage Area Analysis (Bar)
+    // Damage Area Analysis
     const areaCounts: Record<string, number> = {};
     filtered.forEach(a => { 
         if(a.stats?.areaDamaged) areaCounts[a.category] = (areaCounts[a.category] || 0) + a.stats.areaDamaged; 
@@ -117,21 +117,13 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
         .sort((a, b) => b.value - a.value)
         .slice(0, 5);
 
-    // Monthly Trend (Combo)
-    // Aggregate by Month for the filtered view (or all time if no specific month)
+    // Monthly Trend
     const timelineMap: Record<string, { missions: number, hotspots: number }> = {};
-    
-    // Helper to get key
     const getKey = (dateStr: string) => {
         const d = new Date(dateStr);
         return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     };
-
-    // We use ALL activities/hotspots for trend if no specific month selected, otherwise just that month (daily)
-    // Let's show Yearly trend (Monthly) if Year selected or ALL.
-    // If Month selected, show Daily trend.
     const showDaily = selectedMonth !== 'ALL';
-
     const trendSourceA = showDaily ? filtered : activities.filter(a => selectedYear === 'ALL' || String(new Date(a.date).getFullYear()) === selectedYear);
     const trendSourceH = showDaily ? filteredH : hotspotLogs.filter(h => selectedYear === 'ALL' || String(new Date(h.date).getFullYear()) === selectedYear);
 
@@ -149,12 +141,11 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
     });
 
     let trendData = Object.keys(timelineMap).sort().map(k => ({
-        name: k, // Day or YYYY-MM
+        name: k, 
         missions: timelineMap[k].missions,
         hotspots: timelineMap[k].hotspots
     }));
     
-    // If Monthly, format name
     if (!showDaily) {
         trendData = trendData.sort((a,b) => a.name.localeCompare(b.name)).map(d => {
             const [y, m] = d.name.split('-');
@@ -162,12 +153,10 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
             return { ...d, name: date.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' }) };
         });
     } else {
-         // Sort days numerically
          trendData.sort((a,b) => parseInt(a.name) - parseInt(b.name));
     }
 
-
-    // Phase Breakdown (Donut)
+    // Phase Breakdown
     const phaseCounts: Record<string, number> = {};
     filtered.forEach(a => { phaseCounts[a.phase] = (phaseCounts[a.phase] || 0) + 1; });
     const phaseData = Object.keys(phaseCounts).map(k => {
@@ -195,19 +184,41 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
 
 
   return (
-    <div className="flex min-h-screen bg-slate-100 font-sans text-slate-700">
+    <div className="flex flex-col md:flex-row min-h-screen bg-slate-100 font-sans text-slate-700">
       
       {/* --- LEFT SIDEBAR (FILTERS) --- */}
-      <div className="w-64 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col p-6">
-          <div className="mb-8">
-              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                  <LayoutDashboard className="text-teal-600" />
-                  Executive View
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">Salakpra-Erawan FireOp</p>
+      {/* Mobile Toggle Button Header */}
+      <div className="md:hidden p-4 bg-white border-b border-slate-200 flex justify-between items-center sticky top-0 z-30">
+         <h2 className="font-bold text-slate-800 flex items-center gap-2">
+             <LayoutDashboard className="text-teal-600" size={20}/> Executive View
+         </h2>
+         <button 
+            onClick={() => setIsMobileFilterOpen(true)}
+            className="flex items-center gap-2 bg-slate-100 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-200"
+         >
+             <Filter size={16}/> ตัวกรอง
+         </button>
+      </div>
+
+      <div className={`
+          bg-white border-r border-slate-200 flex-shrink-0 flex flex-col p-6
+          fixed inset-0 z-50 md:relative md:inset-auto md:w-64 md:flex
+          ${isMobileFilterOpen ? 'flex animate-fade-in' : 'hidden'}
+      `}>
+          <div className="mb-8 flex justify-between items-start">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <LayoutDashboard className="text-teal-600" />
+                    Executive View
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">Salakpra-Erawan FireOp</p>
+              </div>
+              <button onClick={() => setIsMobileFilterOpen(false)} className="md:hidden p-2 bg-slate-50 rounded-full">
+                  <X size={20} className="text-slate-500"/>
+              </button>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-6 overflow-y-auto custom-scrollbar flex-1">
               {/* Year Filter */}
               <div>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Year</label>
@@ -262,7 +273,7 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
               </div>
           </div>
 
-          <div className="mt-auto pt-6 border-t border-slate-100">
+          <div className="mt-auto pt-6 border-t border-slate-100 hidden md:block">
               <div className="bg-teal-50 p-4 rounded-xl">
                   <p className="text-xs text-teal-800 font-bold mb-1">System Status</p>
                   <div className="flex items-center gap-2">
@@ -271,22 +282,32 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
                   </div>
               </div>
           </div>
+          
+          {/* Apply Button for Mobile */}
+          <div className="mt-6 pt-4 border-t border-slate-100 md:hidden">
+              <button 
+                onClick={() => setIsMobileFilterOpen(false)}
+                className="w-full py-3 bg-teal-600 text-white font-bold rounded-xl shadow-lg"
+              >
+                  ดูผลลัพธ์ ({stats.missions} ภารกิจ)
+              </button>
+          </div>
       </div>
 
       {/* --- MAIN CONTENT --- */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-slate-100">
           {/* Top Red Line Accent */}
-          <div className="h-1.5 bg-gradient-to-r from-red-600 to-teal-700 w-full"></div>
+          <div className="hidden md:block h-1.5 bg-gradient-to-r from-red-600 to-teal-700 w-full"></div>
 
-          <div className="p-8 overflow-y-auto custom-scrollbar">
+          <div className="p-4 md:p-8 overflow-y-auto custom-scrollbar">
               {/* Title Header */}
-              <div className="mb-8">
+              <div className="mb-8 hidden md:block">
                   <h1 className="text-3xl font-bold text-slate-900">Operational Overview</h1>
                   <p className="text-slate-500 mt-1">รายงานสรุปผลการปฏิบัติงานและสถานการณ์ไฟป่า</p>
               </div>
 
               {/* KPI CARDS ROW */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
                   <KPICard 
                     title="Total Missions" 
                     value={stats.missions} 
@@ -320,20 +341,20 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
               </div>
 
               {/* CHARTS ROW 1 */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 mb-6 md:mb-8">
                   {/* Top Activities */}
-                  <div className="bg-white p-6 rounded-sm shadow-sm border border-slate-200">
+                  <div className="bg-white p-4 md:p-6 rounded-sm shadow-sm border border-slate-200">
                       <h3 className="font-bold text-slate-800 mb-6 border-l-4 border-teal-600 pl-3">Top Activities (ภารกิจหลัก)</h3>
                       <div className="h-64">
                           <ResponsiveContainer width="100%" height="100%">
-                              <BarChart layout="vertical" data={charts.topActivitiesData} margin={{ left: 40 }}>
+                              <BarChart layout="vertical" data={charts.topActivitiesData} margin={{ left: 0 }}>
                                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0"/>
                                   <XAxis type="number" hide />
                                   <YAxis 
                                     dataKey="name" 
                                     type="category" 
                                     tick={{ fontSize: 11, fill: '#475569' }} 
-                                    width={100}
+                                    width={90}
                                   />
                                   <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius: '4px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'}}/>
                                   <Bar dataKey="value" fill={COLORS.tealDark} barSize={20} radius={[0, 4, 4, 0]}>
@@ -347,8 +368,8 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
                   </div>
 
                   {/* Damaged Area Analysis */}
-                  <div className="bg-white p-6 rounded-sm shadow-sm border border-slate-200">
-                      <h3 className="font-bold text-slate-800 mb-6 border-l-4 border-red-500 pl-3">Damage Analysis (พื้นที่เสียหายแยกตามประเภท)</h3>
+                  <div className="bg-white p-4 md:p-6 rounded-sm shadow-sm border border-slate-200">
+                      <h3 className="font-bold text-slate-800 mb-6 border-l-4 border-red-500 pl-3">Damage Analysis (พื้นที่เสียหาย)</h3>
                       <div className="h-64">
                           <ResponsiveContainer width="100%" height="100%">
                               <BarChart data={charts.areaData}>
@@ -364,10 +385,10 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
               </div>
 
               {/* CHARTS ROW 2 */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 pb-8">
                    {/* Monthly Trend */}
-                   <div className="lg:col-span-2 bg-white p-6 rounded-sm shadow-sm border border-slate-200">
-                      <div className="flex justify-between items-center mb-6">
+                   <div className="lg:col-span-2 bg-white p-4 md:p-6 rounded-sm shadow-sm border border-slate-200">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-2">
                           <h3 className="font-bold text-slate-800 border-l-4 border-yellow-500 pl-3">Operational Trend</h3>
                           <div className="flex gap-4 text-xs">
                               <div className="flex items-center gap-1"><span className="w-3 h-3 bg-slate-200 rounded-sm"></span> Missions</div>
@@ -390,7 +411,7 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
                    </div>
 
                    {/* Phase Breakdown */}
-                   <div className="lg:col-span-1 bg-white p-6 rounded-sm shadow-sm border border-slate-200">
+                   <div className="lg:col-span-1 bg-white p-4 md:p-6 rounded-sm shadow-sm border border-slate-200">
                       <h3 className="font-bold text-slate-800 mb-6 border-l-4 border-teal-600 pl-3">Phase Breakdown</h3>
                       <div className="h-56 relative">
                           <ResponsiveContainer width="100%" height="100%">
@@ -441,8 +462,8 @@ export const PresentationView: React.FC<PresentationViewProps> = ({ activities, 
 const KPICard = ({ title, value, unit, isRed, trend, subText }: any) => {
     const isTrendUp = trend.dir === 'up';
     const trendColor = isRed 
-        ? (isTrendUp ? 'text-red-600' : 'text-green-600') // For bad things (Hotspots), Up is bad (Red)
-        : (isTrendUp ? 'text-green-600' : 'text-red-600'); // For good things (Missions), Up is good (Green) - debatable for work load, but let's assume activity is good.
+        ? (isTrendUp ? 'text-red-600' : 'text-green-600') 
+        : (isTrendUp ? 'text-green-600' : 'text-red-600'); 
 
     return (
         <div className="bg-white p-6 rounded-sm shadow-sm border border-slate-200 flex flex-col justify-between h-32 relative overflow-hidden">
