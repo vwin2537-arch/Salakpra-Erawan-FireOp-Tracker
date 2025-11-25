@@ -209,8 +209,8 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
     if (!files || files.length === 0) return;
 
     const currentImages = formData.imageUrls || [];
-    if (currentImages.length + files.length > 5) {
-      alert('สามารถอัปโหลดรูปภาพได้สูงสุด 5 รูปต่อกิจกรรม');
+    if (currentImages.length + files.length > 10) {
+      alert('สามารถอัปโหลดรูปภาพได้สูงสุด 10 รูปต่อกิจกรรม');
       return;
     }
 
@@ -549,8 +549,8 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
           {/* Image Upload */}
           <div>
             <label className="block text-sm font-medium text-slate-900 mb-2 flex items-center justify-between">
-                <span className="flex items-center gap-2"><ImageIcon size={18} /> รูปภาพประกอบ (สูงสุด 5 รูป)</span>
-                <span className="text-xs text-slate-500">{formData.imageUrls?.length || 0}/5</span>
+                <span className="flex items-center gap-2"><ImageIcon size={18} /> รูปภาพประกอบ (สูงสุด 10 รูป)</span>
+                <span className="text-xs text-slate-500">{formData.imageUrls?.length || 0}/10</span>
             </label>
             
             <div className="grid grid-cols-3 md:grid-cols-4 gap-4 mb-4">
@@ -567,7 +567,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
                 </div>
               ))}
               
-              {(formData.imageUrls?.length || 0) < 5 && (
+              {(formData.imageUrls?.length || 0) < 10 && (
                 <div 
                   onClick={() => fileInputRef.current?.click()}
                   className="border-2 border-dashed border-slate-300 rounded-lg aspect-square flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 hover:border-orange-400 transition-all text-slate-400 hover:text-orange-500 bg-white"
