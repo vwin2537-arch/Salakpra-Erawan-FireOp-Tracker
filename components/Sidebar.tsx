@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, PlusCircle, Presentation, History, TreePine, Satellite, Settings, X } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Presentation, History, TreePine, Satellite, Settings, X, Megaphone, FileText } from 'lucide-react';
 import { AppSettings } from '../types';
 
 interface SidebarProps {
@@ -17,6 +17,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, setti
     { id: 'hotspot', label: 'รายงาน Hotspot (ดาวเทียม)', icon: <Satellite size={20} /> },
     { id: 'log', label: 'บันทึกปฏิบัติงาน', icon: <PlusCircle size={20} /> },
     { id: 'history', label: 'ประวัติการดำเนินงาน', icon: <History size={20} /> },
+    { id: 'pr_report', label: 'รายงาน ปชส.', icon: <Megaphone size={20} /> },
     { id: 'presentation', label: 'โหมดนำเสนอ (Slide)', icon: <Presentation size={20} /> },
     { id: 'settings', label: 'ตั้งค่าระบบ (Settings)', icon: <Settings size={20} /> },
   ];

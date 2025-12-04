@@ -1,7 +1,89 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { ActivityLog, OperationalPhase, ActivityCategory, AppSettings } from '../types';
-import { Save, AlertCircle, Image as ImageIcon, X, Plus, MapPin, Loader, Info, Calendar, CheckCircle, ExternalLink, Users, RefreshCcw, Eye, Lock, Check } from 'lucide-react';
+import { ActivityLog, OperationalPhase, ActivityCategory, AppSettings, LocationDetail } from '../types';
+import { Save, AlertCircle, Image as ImageIcon, X, Plus, MapPin, Loader, Info, Calendar, CheckCircle, ExternalLink, Users, RefreshCcw, Eye, Lock, Check, Megaphone, ChevronDown, ChevronUp } from 'lucide-react';
+import L from 'leaflet';
+
+// FIX: Use CDN URLs instead of importing images directly
+const iconUrl = 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png';
+const iconShadowUrl = 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+    iconUrl: iconUrl,
+    shadowUrl: iconShadowUrl,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+
+// New Pure Leaflet Map Component
+const MapPicker: React.FC<{
+    initialPos: { lat: number, lng: number };
+    onConfirm: (pos: { lat: number, lng: number }) => void;
+    onClose: () => void;
+}> = ({ initialPos, onConfirm, onClose }) => {
+    const mapContainerRef = useRef<HTMLDivElement>(null);
+    const mapInstanceRef = useRef<L.Map | null>(null);
+    const markerRef = useRef<L.Marker | null>(null);
+    const [selectedPos, setSelectedPos] = useState(initialPos);
+
+    useEffect(() => {
+        if (!mapContainerRef.current || mapInstanceRef.current) return;
+
+        // Initialize Map
+        const map = L.map(mapContainerRef.current).setView([initialPos.lat, initialPos.lng], 13);
+        mapInstanceRef.current = map;
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        const marker = L.marker([initialPos.lat, initialPos.lng], { icon: DefaultIcon }).addTo(map);
+        markerRef.current = marker;
+
+        map.on('click', (e) => {
+            const { lat, lng } = e.latlng;
+            setSelectedPos({ lat, lng });
+            marker.setLatLng([lat, lng]);
+            map.flyTo([lat, lng], map.getZoom());
+        });
+
+        // Cleanup
+        return () => {
+            if (mapInstanceRef.current) {
+                mapInstanceRef.current.remove();
+                mapInstanceRef.current = null;
+            }
+        };
+    }, []); // Run once on mount
+
+    return (
+        <div className="bg-white w-full max-w-2xl h-[80vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-up">
+            <div className="bg-slate-800 p-4 flex justify-between items-center text-white shrink-0">
+                <h3 className="font-bold flex items-center gap-2"><MapPin size={20}/> เลือกจุดบนแผนที่</h3>
+                <button onClick={onClose} className="hover:bg-slate-700 p-1 rounded-full"><X size={24}/></button>
+            </div>
+            <div className="flex-1 relative bg-slate-100 z-0">
+                <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[400] bg-white/90 px-4 py-2 rounded-full shadow-lg text-sm font-bold text-slate-700 pointer-events-none border border-slate-200">
+                    แตะที่แผนที่เพื่อปักหมุด
+                </div>
+            </div>
+            <div className="p-4 bg-white border-t border-slate-200 flex justify-between items-center shrink-0">
+                <div className="text-sm">
+                    <p className="text-slate-500">พิกัดที่เลือก:</p>
+                    <p className="font-mono font-bold text-slate-800">{selectedPos.lat.toFixed(6)}, {selectedPos.lng.toFixed(6)}</p>
+                </div>
+                <button 
+                    onClick={() => onConfirm(selectedPos)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg transition-transform hover:scale-105 active:scale-95"
+                >
+                    ยืนยันตำแหน่ง
+                </button>
+            </div>
+        </div>
+    );
+};
 
 interface ActivityFormProps {
   onSave: (activity: ActivityLog) => void;
@@ -76,11 +158,24 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
   const [areaDamaged, setAreaDamaged] = useState<number | ''>('');
   const [personnelCount, setPersonnelCount] = useState<number | ''>('');
 
+  // Location Details (PR)
+  const [locDetail, setLocDetail] = useState<LocationDetail>({
+      village: '',
+      tambon: '',
+      amphoe: '',
+      province: 'กาญจนบุรี',
+      remark: 'ดำเนินการแล้ว'
+  });
+  const [showLocDetail, setShowLocDetail] = useState(false);
+
   const [isProcessingImg, setIsProcessingImg] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false); // Add state to lock submit button
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   
+  // Map Picker State
+  const [showMapPicker, setShowMapPicker] = useState(false);
+
   // PIN Modal State for Editing
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -143,6 +238,21 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
                 setGpsLatLon({ lat: initialData.location.lat, lng: initialData.location.lng });
             }
         }
+
+        // Load Location Detail (PR)
+        if (initialData.locationDetail) {
+            setLocDetail(initialData.locationDetail);
+            setShowLocDetail(true);
+        } else {
+            setShowLocDetail(false);
+            setLocDetail({
+                village: '',
+                tambon: '',
+                amphoe: '',
+                province: 'กาญจนบุรี',
+                remark: 'ดำเนินการแล้ว'
+            });
+        }
     } else {
         // Reset form when switching from edit mode to add mode
         setFormData({
@@ -160,6 +270,14 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
         setGpsAccuracy(null);
         setAreaDamaged('');
         setPersonnelCount('');
+        setLocDetail({
+            village: '',
+            tambon: '',
+            amphoe: '',
+            province: 'กาญจนบุรี',
+            remark: 'ดำเนินการแล้ว'
+        });
+        setShowLocDetail(false);
         setIsSubmitting(false);
     }
   }, [initialData, defaultCategory]);
@@ -202,6 +320,22 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
+  };
+
+  const handleMapConfirm = (pos: { lat: number, lng: number }) => {
+    const utmString = toUTM(pos.lat, pos.lng);
+    setUtmInput(utmString);
+    setGpsLatLon(pos);
+    setGpsAccuracy(null); // Selected manually, so no GPS accuracy
+    setFormData(prev => ({
+      ...prev,
+      location: {
+        lat: pos.lat,
+        lng: pos.lng,
+        utm: utmString
+      }
+    }));
+    setShowMapPicker(false);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -304,6 +438,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
           ...(areaDamaged ? { areaDamaged: Number(areaDamaged) } : {}),
           ...(personnelCount ? { personnelCount: Number(personnelCount) } : {})
         },
+        locationDetail: showLocDetail ? locDetail : undefined
       };
   
       onSave(newActivity);
@@ -330,6 +465,10 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
           setGpsAccuracy(null);
           setAreaDamaged('');
           setPersonnelCount('');
+          setLocDetail({
+             village: '', tambon: '', amphoe: '', province: 'กาญจนบุรี', remark: 'ดำเนินการแล้ว'
+          });
+          setShowLocDetail(false);
           setIsSubmitting(false); // Re-enable after state reset
       }
   }
@@ -487,6 +626,75 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
             />
           </div>
 
+          {/* Location Details (PR) - Collapsible Section */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+             <button
+                type="button"
+                onClick={() => setShowLocDetail(!showLocDetail)}
+                className={`w-full flex items-center justify-between p-4 font-bold text-sm transition-colors ${showLocDetail ? 'bg-green-50 text-green-800' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+             >
+                <div className="flex items-center gap-2">
+                    <Megaphone size={18} />
+                    ระบุสถานที่ละเอียด (สำหรับรายงาน ปชส.)
+                </div>
+                {showLocDetail ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+             </button>
+             
+             {showLocDetail && (
+                 <div className="p-4 bg-white grid grid-cols-1 md:grid-cols-2 gap-4 animate-slide-down">
+                    <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">หมู่บ้าน / หมู่ที่</label>
+                        <input 
+                            type="text" 
+                            placeholder="เช่น บ้านท่าทุ่งนา หมู่ 1"
+                            value={locDetail.village}
+                            onChange={e => setLocDetail({...locDetail, village: e.target.value})}
+                            className="w-full border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 border bg-white text-slate-900"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">ตำบล</label>
+                        <input 
+                            type="text" 
+                            placeholder="เช่น ไทรโยค"
+                            value={locDetail.tambon}
+                            onChange={e => setLocDetail({...locDetail, tambon: e.target.value})}
+                            className="w-full border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 border bg-white text-slate-900"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">อำเภอ</label>
+                        <input 
+                            type="text" 
+                            placeholder="เช่น ไทรโยค"
+                            value={locDetail.amphoe}
+                            onChange={e => setLocDetail({...locDetail, amphoe: e.target.value})}
+                            className="w-full border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 border bg-white text-slate-900"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">จังหวัด</label>
+                        <input 
+                            type="text" 
+                            value={locDetail.province}
+                            onChange={e => setLocDetail({...locDetail, province: e.target.value})}
+                            className="w-full border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 border bg-white text-slate-900"
+                        />
+                    </div>
+                    <div className="md:col-span-2">
+                         <label className="block text-xs font-medium text-slate-700 mb-1">หมายเหตุ</label>
+                         <input 
+                            type="text" 
+                            placeholder="เช่น ดำเนินการแล้ว"
+                            value={locDetail.remark || ''}
+                            onChange={e => setLocDetail({...locDetail, remark: e.target.value})}
+                            className="w-full border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 border bg-white text-slate-900"
+                         />
+                    </div>
+                 </div>
+             )}
+          </div>
+
           {/* Location (GPS/UTM) */}
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
             <label className="block text-sm font-bold text-slate-900 mb-2 flex items-center justify-between">
@@ -507,10 +715,18 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
                         type="button"
                         onClick={handleGetLocation}
                         disabled={isLocating}
-                        className="bg-slate-800 hover:bg-slate-700 text-white p-2 rounded-lg transition-colors flex items-center gap-2 px-4 whitespace-nowrap shadow-sm"
+                        className="bg-slate-800 hover:bg-slate-700 text-white p-2 rounded-lg transition-colors flex items-center gap-2 px-4 whitespace-nowrap shadow-sm text-sm font-medium"
                     >
                         {isLocating ? <Loader size={18} className="animate-spin"/> : <MapPin size={18} />}
-                        {isLocating ? 'กำลังหาพิกัด...' : 'ดึงพิกัดปัจจุบัน'}
+                        {isLocating ? 'หาพิกัด' : 'GPS'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setShowMapPicker(true)}
+                        className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 p-2 rounded-lg transition-colors flex items-center gap-2 px-4 whitespace-nowrap shadow-sm text-sm font-medium"
+                    >
+                         <MapPin size={18} className="text-blue-500"/>
+                         เลือกบนแผนที่
                     </button>
                 </div>
 
@@ -536,13 +752,6 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
                         </a>
                     </div>
                 )}
-                
-                <div className="flex items-start gap-2 mt-1">
-                    <Info size={14} className="text-slate-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-xs text-slate-500">
-                        ระบบจะแปลง GPS (Lat/Long) เป็น UTM Zone 47P โดยอัตโนมัติ หากท่านมีค่าพิกัดจาก GPS พกพา หรือตัวเลขที่ระบบแปลงให้ไม่ตรงกับพื้นที่จริง สามารถพิมพ์แก้ไขตัวเลขในช่องได้ทันที
-                    </p>
-                </div>
             </div>
           </div>
 
@@ -618,6 +827,17 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
         </form>
       </div>
 
+      {/* Map Picker Modal */}
+      {showMapPicker && (
+          <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <MapPicker 
+                initialPos={gpsLatLon || { lat: 14.3541, lng: 99.1419 }} // Default to Erawan area if unknown
+                onConfirm={handleMapConfirm}
+                onClose={() => setShowMapPicker(false)}
+              />
+          </div>
+      )}
+
       {/* Confirmation Modal */}
       {showConfirmModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in">
@@ -646,6 +866,11 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
                       <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm text-slate-600">
                           <div className="mb-1"><span className="font-semibold text-slate-700">ประเภท:</span> {getCategoryLabel(formData.category as ActivityCategory)}</div>
                           {utmInput && <div className="mb-1"><span className="font-semibold text-slate-700">พิกัด:</span> {utmInput}</div>}
+                          {showLocDetail && (
+                              <div className="mb-1 bg-green-50 p-1 rounded text-green-800 border border-green-100">
+                                  <span className="font-semibold">สถานที่ (ปชส.):</span> {locDetail.village}, {locDetail.tambon}, {locDetail.amphoe}
+                              </div>
+                          )}
                           <div className="flex flex-wrap gap-2 mt-2">
                             {areaDamaged && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded border border-red-200">พื้นที่เสียหาย {areaDamaged} ไร่</span>}
                             {personnelCount && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">กำลังพล {personnelCount} นาย</span>}

@@ -7,6 +7,7 @@ import { HistoryList } from './components/HistoryList';
 import { PresentationView } from './components/PresentationView';
 import { HotspotManager } from './components/HotspotManager';
 import { SettingsView } from './components/SettingsView';
+import { PRReportView } from './components/PRReportView'; // Import
 import { ActivityLog, OperationalPhase, HotspotLog, AppSettings } from './types';
 import { apiService } from './services/apiService';
 import { Loader, Cloud, WifiOff, Image as ImageIcon, Menu } from 'lucide-react';
@@ -246,6 +247,8 @@ const App: React.FC = () => {
         );
       case 'presentation':
         return <PresentationView activities={activities} hotspotLogs={hotspotLogs} settings={appSettings} />;
+      case 'pr_report': // NEW CASE
+        return <PRReportView activities={activities} settings={appSettings} />;
       case 'settings':
         return (
             <SettingsView 

@@ -14,6 +14,14 @@ export interface LocationData {
   utm: string; // e.g. "47P 0563210, 1578485" or user input
 }
 
+export interface LocationDetail {
+  village: string;
+  tambon: string;
+  amphoe: string;
+  province: string;
+  remark?: string;
+}
+
 export interface HotspotLog {
   id: string;
   date: string;
@@ -35,6 +43,7 @@ export interface ActivityLog {
   imageUrl?: string; // Legacy single image support
   imageUrls?: string[]; // Support multiple images (Max 5)
   location?: LocationData;
+  locationDetail?: LocationDetail; // New structured location for PR reports
   stats?: {
     areaDamaged?: number; // rai
     personnelCount?: number;
