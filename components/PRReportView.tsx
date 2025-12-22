@@ -41,6 +41,7 @@ export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings
     let tambon = '-';
     let amphoe = '-';
     let province = 'กาญจนบุรี'; // Default
+    let householdCount = undefined;
 
     // Try to find Village (บ้าน... หรือ ชุมชน...)
     const villageMatch = text.match(/(?:บ้าน|ชุมชน)([\u0E00-\u0E7F\s]+?)(?:\s+|$|ต\.|อ\.|หมู่)/);
@@ -61,7 +62,11 @@ export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings
     const amphoeMatch = text.match(/(?:อ\.|อำเภอ)\s*([\u0E00-\u0E7F]+)/);
     if (amphoeMatch) amphoe = amphoeMatch[1];
 
-    return { village, tambon, amphoe, province };
+    // Try to find Households in text (e.g. 50 ครัวเรือน)
+    const hhMatch = text.match(/(\d+)\s*(?:ครัวเรือน|หลังคาเรือน)/);
+    if (hhMatch) householdCount = Number(hhMatch[1]);
+
+    return { village, tambon, amphoe, province, householdCount };
   };
 
   const formatThaiDate = (dateStr: string) => {
@@ -134,23 +139,24 @@ export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings
         
         {/* Header */}
         <div className="text-center mb-6">
-            <h3 className="text-lg font-bold text-black">กำหนดการประชุมหมู่บ้านและการรณรงค์ประชาสัมพันธ์ป้องกันไฟป่า</h3>
+            <h3 className="text-lg font-bold text-black">สรุปผลการรณรงค์ประชาสัมพันธ์ป้องกันไฟป่า</h3>
             <h3 className="text-lg font-bold text-black">{settings.systemName}</h3>
             <h3 className="text-lg font-bold text-black">ประจำเดือน {formatFullThaiMonth(selectedMonth, selectedYear)}</h3>
         </div>
 
         {/* Table */}
-        <div className="w-full border border-black text-sm">
-            <table className="w-full border-collapse">
+        <div className="w-full border border-black text-xs md:text-sm overflow-x-auto print:overflow-visible">
+            <table className="w-full border-collapse min-w-[1000px] print:min-w-full">
                 <thead>
-                    <tr className="bg-green-300 print:bg-green-300 text-center">
-                        <th className="border border-black px-2 py-2 w-24">วัน/เดือน/ปี</th>
-                        <th className="border border-black px-2 py-2">กิจกรรม</th>
-                        <th className="border border-black px-2 py-2 w-48">หมู่บ้าน</th>
-                        <th className="border border-black px-2 py-2 w-24">ตำบล</th>
-                        <th className="border border-black px-2 py-2 w-24">อำเภอ</th>
-                        <th className="border border-black px-2 py-2 w-24">จังหวัด</th>
-                        <th className="border border-black px-2 py-2 w-24">หมายเหตุ</th>
+                    <tr className="bg-green-300 print:bg-green-300 text-center font-bold">
+                        <th className="border border-black px-1 py-2 w-20">วัน/เดือน/ปี</th>
+                        <th className="border border-black px-2 py-2">กิจกรรม/โครงการ</th>
+                        <th className="border border-black px-2 py-2 w-40">หมู่บ้าน/ชุมชน</th>
+                        <th className="border border-black px-1 py-2 w-20">ตำบล</th>
+                        <th className="border border-black px-1 py-2 w-20">อำเภอ</th>
+                        <th className="border border-black px-1 py-2 w-16">จังหวัด</th>
+                        <th className="border border-black px-1 py-2 w-20">จำนวนครัวเรือน</th>
+                        <th className="border border-black px-2 py-2 w-20">หมายเหตุ</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -161,7 +167,7 @@ export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings
 
                         return (
                             <tr key={index} className="text-left align-top">
-                                <td className="border border-black px-2 py-1 text-center whitespace-nowrap">
+                                <td className="border border-black px-1 py-1 text-center whitespace-nowrap">
                                     {formatThaiDate(item.date)}
                                 </td>
                                 <td className="border border-black px-2 py-1">
@@ -170,14 +176,17 @@ export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings
                                 <td className="border border-black px-2 py-1">
                                     {loc.village}
                                 </td>
-                                <td className="border border-black px-2 py-1">
+                                <td className="border border-black px-1 py-1 text-center">
                                     {loc.tambon}
                                 </td>
-                                <td className="border border-black px-2 py-1">
+                                <td className="border border-black px-1 py-1 text-center">
                                     {loc.amphoe}
                                 </td>
-                                <td className="border border-black px-2 py-1">
+                                <td className="border border-black px-1 py-1 text-center">
                                     {loc.province}
+                                </td>
+                                <td className="border border-black px-1 py-1 text-center font-bold">
+                                    {loc.householdCount !== undefined ? loc.householdCount.toLocaleString() : '-'}
                                 </td>
                                 <td className="border border-black px-2 py-1 text-center">
                                     {remarkText}
@@ -187,21 +196,33 @@ export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings
                     })}
                     {reportData.length === 0 && (
                         <tr>
-                            <td colSpan={7} className="border border-black px-2 py-8 text-center text-gray-500 italic">
+                            <td colSpan={8} className="border border-black px-2 py-8 text-center text-gray-500 italic">
                                 -- ไม่มีข้อมูลการประชาสัมพันธ์ในเดือนนี้ --
                             </td>
                         </tr>
                     )}
                 </tbody>
+                {reportData.length > 0 && (
+                    <tfoot>
+                        <tr className="bg-slate-50 font-bold">
+                            <td colSpan={6} className="border border-black px-2 py-2 text-right">รวมจำนวนครัวเรือนทั้งหมด</td>
+                            <td className="border border-black px-1 py-2 text-center bg-yellow-50">
+                                {reportData.reduce((sum, item) => sum + (extractLocation(item).householdCount || 0), 0).toLocaleString()}
+                            </td>
+                            <td className="border border-black px-2 py-2">ครัวเรือน</td>
+                        </tr>
+                    </tfoot>
+                )}
             </table>
         </div>
 
-        {/* Footer (Signature Placeholder example) */}
+        {/* Footer */}
         <div className="mt-8 flex justify-end print:mt-16">
-            <div className="text-center w-64">
-                <p className="mb-8">ลงชื่อ..........................................................ผู้รายงาน</p>
+            <div className="text-center w-80">
+                <p className="mb-12">ลงชื่อ..........................................................ผู้รายงาน</p>
                 <p>(..........................................................)</p>
-                <p>ตำแหน่ง..........................................................</p>
+                <p className="mt-2 text-sm">ตำแหน่ง..........................................................</p>
+                <p className="text-sm">วันที่........../........../..........</p>
             </div>
         </div>
 
@@ -210,6 +231,9 @@ export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings
       {/* CSS for Printing */}
       <style>{`
         @media print {
+            body {
+                background: white !important;
+            }
             body * {
                 visibility: hidden;
             }
@@ -222,18 +246,16 @@ export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings
                 top: 0;
                 width: 100%;
                 margin: 0;
-                padding: 10mm;
+                padding: 5mm;
             }
             .print\\:bg-green-300 {
-                background-color: #86efac !important; /* Tailwind green-300 */
+                background-color: #86efac !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
-            /* Hide URL headers/footers in modern browsers if possible, 
-               though user settings mostly control this */
             @page {
-                size: landscape;
-                margin: 0;
+                size: A4 landscape;
+                margin: 10mm;
             }
         }
       `}</style>

@@ -164,7 +164,8 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
       tambon: '',
       amphoe: '',
       province: 'กาญจนบุรี',
-      remark: 'ดำเนินการแล้ว'
+      remark: 'ดำเนินการแล้ว',
+      householdCount: undefined
   });
   const [showLocDetail, setShowLocDetail] = useState(false);
 
@@ -250,7 +251,8 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
                 tambon: '',
                 amphoe: '',
                 province: 'กาญจนบุรี',
-                remark: 'ดำเนินการแล้ว'
+                remark: 'ดำเนินการแล้ว',
+                householdCount: undefined
             });
         }
     } else {
@@ -275,7 +277,8 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
             tambon: '',
             amphoe: '',
             province: 'กาญจนบุรี',
-            remark: 'ดำเนินการแล้ว'
+            remark: 'ดำเนินการแล้ว',
+            householdCount: undefined
         });
         setShowLocDetail(false);
         setIsSubmitting(false);
@@ -466,7 +469,7 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
           setAreaDamaged('');
           setPersonnelCount('');
           setLocDetail({
-             village: '', tambon: '', amphoe: '', province: 'กาญจนบุรี', remark: 'ดำเนินการแล้ว'
+             village: '', tambon: '', amphoe: '', province: 'กาญจนบุรี', remark: 'ดำเนินการแล้ว', householdCount: undefined
           });
           setShowLocDetail(false);
           setIsSubmitting(false); // Re-enable after state reset
@@ -681,7 +684,17 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
                             className="w-full border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 border bg-white text-slate-900"
                         />
                     </div>
-                    <div className="md:col-span-2">
+                    <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">จำนวนครัวเรือน (ที่ได้รับ ปชส.)</label>
+                        <input 
+                            type="number" 
+                            placeholder="0"
+                            value={locDetail.householdCount === undefined ? '' : locDetail.householdCount}
+                            onChange={e => setLocDetail({...locDetail, householdCount: e.target.value === '' ? undefined : Number(e.target.value)})}
+                            className="w-full border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 border bg-white text-slate-900"
+                        />
+                    </div>
+                    <div>
                          <label className="block text-xs font-medium text-slate-700 mb-1">หมายเหตุ</label>
                          <input 
                             type="text" 
@@ -868,7 +881,8 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({ onSave, initialData,
                           {utmInput && <div className="mb-1"><span className="font-semibold text-slate-700">พิกัด:</span> {utmInput}</div>}
                           {showLocDetail && (
                               <div className="mb-1 bg-green-50 p-1 rounded text-green-800 border border-green-100">
-                                  <span className="font-semibold">สถานที่ (ปชส.):</span> {locDetail.village}, {locDetail.tambon}, {locDetail.amphoe}
+                                  <span className="font-semibold">สถานที่ (ปชส.):</span> {locDetail.village}, {locDetail.tambon}, {locDetail.amphoe} 
+                                  {locDetail.householdCount !== undefined && ` (${locDetail.householdCount} ครัวเรือน)`}
                               </div>
                           )}
                           <div className="flex flex-wrap gap-2 mt-2">

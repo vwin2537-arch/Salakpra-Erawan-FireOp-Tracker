@@ -20,6 +20,7 @@ export interface LocationDetail {
   amphoe: string;
   province: string;
   remark?: string;
+  householdCount?: number; // New field for PR reports
 }
 
 export interface HotspotLog {
