@@ -9,24 +9,65 @@ interface PRReportViewProps {
 }
 
 export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings }) => {
+    const [filterMode, setFilterMode] = useState<'month' | 'range'>('month');
     const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1));
     const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
+    const [startDate, setStartDate] = useState<string>('');
+    const [endDate, setEndDate] = useState<string>('');
 
-    // 1. Filter Data: Get only PR activities for selected month/year
+    // Helper: Parse date robustly
+    const parseDate = (dateStr: string): Date | null => {
+        if (!dateStr) return null;
+
+        // Try standard parsing first
+        let d = new Date(dateStr);
+        if (!isNaN(d.getTime())) return d;
+
+        // Try Thai format DD/MM/YYYY
+        // Check for common separators: / or -
+        const parts = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+        if (parts) {
+            // parts[1] = Day, parts[2] = Month, parts[3] = Year
+            // Convert to YYYY-MM-DD
+            d = new Date(`${parts[3]}-${parts[2]}-${parts[1]}`);
+            if (!isNaN(d.getTime())) return d;
+        }
+
+        return null;
+    };
+
+    // 1. Filter Data: Get only PR activities for selected month/year OR range
     const reportData = useMemo(() => {
         return activities
             .filter(a => {
                 // Filter by PR category (Assuming 'PR' ID or keyword in category)
-                const isPR = a.category === 'PR' || a.category.includes('ประชาสัมพันธ์');
+                const isPR = a.category === 'PR' || a.category.includes('ประชาสัมพันธ์') || a.title?.includes('รณรงค์') || a.description?.includes('รณรงค์');
+                if (!isPR) return false;
 
-                const d = new Date(a.date);
-                const matchMonth = String(d.getMonth() + 1) === selectedMonth;
-                const matchYear = String(d.getFullYear()) === selectedYear;
+                const d = parseDate(a.date);
+                if (!d) return false;
 
-                return isPR && matchMonth && matchYear;
+                if (filterMode === 'month') {
+                    const matchMonth = String(d.getMonth() + 1) === selectedMonth;
+                    const matchYear = String(d.getFullYear()) === selectedYear;
+                    return matchMonth && matchYear;
+                } else {
+                    // Range Mode
+                    if (!startDate || !endDate) return true; // Show all if dates not selected
+                    const start = new Date(startDate);
+                    const end = new Date(endDate);
+                    // Reset time for accurate date comparison
+                    start.setHours(0, 0, 0, 0);
+                    end.setHours(23, 59, 59, 999);
+                    return d >= start && d <= end;
+                }
             })
-            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    }, [activities, selectedMonth, selectedYear]);
+            .sort((a, b) => {
+                const da = parseDate(a.date);
+                const db = parseDate(b.date);
+                return (da?.getTime() || 0) - (db?.getTime() || 0);
+            });
+    }, [activities, selectedMonth, selectedYear, filterMode, startDate, endDate]);
 
     // 2. Helper to extract location (Use structured data first, fallback to regex for legacy)
     const extractLocation = (item: ActivityLog) => {
@@ -70,7 +111,9 @@ export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings
     };
 
     const formatThaiDate = (dateStr: string) => {
-        const d = new Date(dateStr);
+        const d = parseDate(dateStr);
+        if (!d) return dateStr || '-';
+
         const day = d.getDate();
         const months = [
             "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
@@ -91,6 +134,13 @@ export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings
         return `${months[m]} ${y}`;
     };
 
+    const formatThaiDateRange = (start: string, end: string) => {
+        if (!start || !end) return "กำหนดช่วงวันที่...";
+        const d1 = new Date(start);
+        const d2 = new Date(end);
+        return `${formatThaiDate(start)} - ${formatThaiDate(end)}`;
+    }
+
     return (
         <div className="p-8 min-h-screen font-sarabun">
 
@@ -103,28 +153,58 @@ export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings
 
                 <div className="flex gap-3 p-2 rounded-xl border" style={{ background: 'rgba(30, 41, 59, 0.8)', borderColor: 'rgba(71, 85, 105, 0.3)' }}>
                     <div className="flex items-center gap-2 px-3 border-r border-slate-600">
-                        <Calendar size={18} className="text-orange-500" />
+                        <Filter size={18} className="text-orange-500" />
                         <select
-                            value={selectedMonth}
-                            onChange={e => setSelectedMonth(e.target.value)}
+                            value={filterMode}
+                            onChange={e => setFilterMode(e.target.value as 'month' | 'range')}
                             className="bg-transparent font-medium text-slate-300 focus:outline-none"
                         >
-                            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                                <option key={m} value={String(m)} className="bg-slate-800 text-white">
-                                    {new Date(2000, m - 1, 1).toLocaleDateString('th-TH', { month: 'long' })}
-                                </option>
-                            ))}
-                        </select>
-                        <select
-                            value={selectedYear}
-                            onChange={e => setSelectedYear(e.target.value)}
-                            className="bg-transparent font-medium text-slate-300 focus:outline-none"
-                        >
-                            <option value="2024" className="bg-slate-800 text-white">2024</option>
-                            <option value="2025" className="bg-slate-800 text-white">2025</option>
-                            <option value="2026" className="bg-slate-800 text-white">2026</option>
+                            <option value="month" className="bg-slate-800 text-white">รายเดือน</option>
+                            <option value="range" className="bg-slate-800 text-white">กำหนดช่วงวันที่</option>
                         </select>
                     </div>
+
+                    {filterMode === 'month' ? (
+                        <div className="flex items-center gap-2 px-3 border-r border-slate-600 animate-fade-in">
+                            <Calendar size={18} className="text-orange-500" />
+                            <select
+                                value={selectedMonth}
+                                onChange={e => setSelectedMonth(e.target.value)}
+                                className="bg-transparent font-medium text-slate-300 focus:outline-none"
+                            >
+                                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                                    <option key={m} value={String(m)} className="bg-slate-800 text-white">
+                                        {new Date(2000, m - 1, 1).toLocaleDateString('th-TH', { month: 'long' })}
+                                    </option>
+                                ))}
+                            </select>
+                            <select
+                                value={selectedYear}
+                                onChange={e => setSelectedYear(e.target.value)}
+                                className="bg-transparent font-medium text-slate-300 focus:outline-none"
+                            >
+                                <option value="2024" className="bg-slate-800 text-white">2024</option>
+                                <option value="2025" className="bg-slate-800 text-white">2025</option>
+                                <option value="2026" className="bg-slate-800 text-white">2026</option>
+                            </select>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2 px-3 border-r border-slate-600 animate-fade-in">
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={e => setStartDate(e.target.value)}
+                                className="bg-slate-700 text-white px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-orange-500 text-sm"
+                            />
+                            <span className="text-slate-400">-</span>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={e => setEndDate(e.target.value)}
+                                className="bg-slate-700 text-white px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-orange-500 text-sm"
+                            />
+                        </div>
+                    )}
 
                     <button
                         onClick={() => window.print()}
@@ -142,7 +222,11 @@ export const PRReportView: React.FC<PRReportViewProps> = ({ activities, settings
                 <div className="text-center mb-6">
                     <h3 className="text-lg font-bold text-black">สรุปผลการรณรงค์ประชาสัมพันธ์ป้องกันไฟป่า</h3>
                     <h3 className="text-lg font-bold text-black">{settings.systemName}</h3>
-                    <h3 className="text-lg font-bold text-black">ประจำเดือน {formatFullThaiMonth(selectedMonth, selectedYear)}</h3>
+                    {filterMode === 'month' ? (
+                        <h3 className="text-lg font-bold text-black">ประจำเดือน {formatFullThaiMonth(selectedMonth, selectedYear)}</h3>
+                    ) : (
+                        <h3 className="text-lg font-bold text-black">ระหว่างวันที่ {formatThaiDateRange(startDate, endDate)}</h3>
+                    )}
                 </div>
 
                 {/* Table */}
