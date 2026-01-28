@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, PlusCircle, Presentation, History, TreePine, Satellite, Settings, X, Megaphone, FileText } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Presentation, History, TreePine, Satellite, Settings, X, Megaphone, FileText, Flame } from 'lucide-react';
 import { AppSettings } from '../types';
 
 interface SidebarProps {
@@ -15,6 +15,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, setti
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     { id: 'hotspot', label: 'Hotspot Report', icon: <Satellite size={20} /> },
+    { id: 'fire_incident', label: 'บันทึกเหตุไฟ', icon: <Flame size={20} /> },
     { id: 'log', label: '+ บันทึกกิจกรรม', icon: <PlusCircle size={20} /> },
     { id: 'history', label: 'ประวัติกิจกรรม', icon: <History size={20} /> },
     { id: 'pr_report', label: 'รายงาน PR', icon: <Megaphone size={20} /> },
@@ -96,8 +97,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, setti
                 onClose(); // Close drawer on mobile when item selected
               }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-r-lg rounded-l-sm transition-all duration-200 group ${activeTab === item.id
-                  ? getActiveItemClass()
-                  : 'text-white/60 hover:bg-white/5 hover:text-white'
+                ? getActiveItemClass()
+                : 'text-white/60 hover:bg-white/5 hover:text-white'
                 }`}
             >
               <div className={`transition-transform duration-200 ${activeTab === item.id ? 'scale-110' : 'group-hover:scale-110'}`}>

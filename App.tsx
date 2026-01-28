@@ -8,7 +8,8 @@ import { PresentationView } from './components/PresentationView';
 import { HotspotManager } from './components/HotspotManager';
 import { SettingsView } from './components/SettingsView';
 import { PRReportView } from './components/PRReportView';
-import { ActivityLog, OperationalPhase, HotspotLog, AppSettings } from './types';
+import { FireIncidentLog } from './components/FireIncidentLog';
+import { ActivityLog, OperationalPhase, HotspotLog, AppSettings, FireIncident } from './types';
 import { apiService } from './services/apiService';
 import { Loader, Cloud, WifiOff, Image as ImageIcon, Menu, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 
@@ -41,6 +42,7 @@ const App: React.FC = () => {
     // Data States
     const [activities, setActivities] = useState<ActivityLog[]>([]);
     const [hotspotLogs, setHotspotLogs] = useState<HotspotLog[]>([]);
+    const [fireIncidents, setFireIncidents] = useState<FireIncident[]>([]);
     const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
     // UI States - NEW: Non-blocking sync indicator
@@ -261,6 +263,64 @@ const App: React.FC = () => {
         }
     };
 
+    // =============== FIRE INCIDENT HANDLERS ===============
+    const handleSaveFireIncidents = async (newIncidents: FireIncident[]) => {
+        // OPTIMISTIC: Add to UI immediately
+        setFireIncidents(prev => [...newIncidents, ...prev]);
+
+        setSyncStatus('syncing');
+        setSyncMessage(`กำลังบันทึก ${newIncidents.length} เหตุไฟ...`);
+
+        try {
+            // Save to localStorage for now (can integrate with API later)
+            const allIncidents = [...newIncidents, ...fireIncidents];
+            localStorage.setItem('fireIncidents', JSON.stringify(allIncidents));
+
+            setSyncStatus('success');
+            setSyncMessage(`บันทึก ${newIncidents.length} เหตุสำเร็จ`);
+            setTimeout(() => setSyncStatus('idle'), 2000);
+        } catch (err: any) {
+            setSyncStatus('error');
+            setSyncMessage('บันทึกไม่สำเร็จ');
+            setFireIncidents(prev => prev.filter(i => !newIncidents.some(n => n.id === i.id)));
+            setTimeout(() => setSyncStatus('idle'), 5000);
+        }
+    };
+
+    const handleDeleteFireIncident = async (id: string) => {
+        const backup = fireIncidents.find(i => i.id === id);
+        setFireIncidents(prev => prev.filter(i => i.id !== id));
+
+        setSyncStatus('syncing');
+        setSyncMessage('กำลังลบเหตุไฟ...');
+
+        try {
+            const updatedIncidents = fireIncidents.filter(i => i.id !== id);
+            localStorage.setItem('fireIncidents', JSON.stringify(updatedIncidents));
+
+            setSyncStatus('success');
+            setSyncMessage('ลบสำเร็จ');
+            setTimeout(() => setSyncStatus('idle'), 2000);
+        } catch (err: any) {
+            setSyncStatus('error');
+            setSyncMessage('ลบไม่สำเร็จ');
+            if (backup) setFireIncidents(prev => [...prev, backup]);
+            setTimeout(() => setSyncStatus('idle'), 5000);
+        }
+    };
+
+    // Load fire incidents from localStorage on mount
+    useEffect(() => {
+        const savedIncidents = localStorage.getItem('fireIncidents');
+        if (savedIncidents) {
+            try {
+                setFireIncidents(JSON.parse(savedIncidents));
+            } catch (e) {
+                console.error('Failed to parse fire incidents', e);
+            }
+        }
+    }, []);
+
     // Global Dark Command Center Background
     const getMainBg = () => {
         // Always use dark Command Center theme
@@ -369,6 +429,15 @@ const App: React.FC = () => {
                 return <PresentationView activities={activities} hotspotLogs={hotspotLogs} settings={appSettings} />;
             case 'pr_report':
                 return <PRReportView activities={activities} settings={appSettings} />;
+            case 'fire_incident':
+                return (
+                    <FireIncidentLog
+                        incidents={fireIncidents}
+                        hotspotLogs={hotspotLogs}
+                        onSave={handleSaveFireIncidents}
+                        onDelete={handleDeleteFireIncident}
+                    />
+                );
             case 'settings':
                 return (
                     <SettingsView
