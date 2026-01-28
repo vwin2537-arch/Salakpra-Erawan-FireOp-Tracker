@@ -1,0 +1,7 @@
+{
+  "name": "Salakpra-Erawan FireOp Tracker",
+  "description": "ระบบรวบรวมและสรุปผลการดำเนินงาน สถานีไฟป่าสลักพระ-เอราวัณ ครอบคลุม 3 ช่วงภารกิจหลัก (เตรียมการ, หน้าไฟ, หลังหน้าไฟ) พร้อม Dashboard และ AI Summary",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
