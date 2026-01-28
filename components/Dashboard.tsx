@@ -127,9 +127,12 @@ const LiveClock: React.FC = () => {
     );
 };
 
+import { DashboardPdfExport } from './DashboardPdfExport';
+
 export const Dashboard: React.FC<DashboardProps> = ({ activities, hotspotLogs, settings, fireIncidents = [] }) => {
     const [aiAdvice, setAiAdvice] = useState<string | null>(null);
     const [loadingAi, setLoadingAi] = useState(false);
+    const [showPdfExport, setShowPdfExport] = useState(false);
 
     const getCategoryLabel = (id: string) => settings.categories.find(c => c.id === id)?.label || id;
 
@@ -283,6 +286,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ activities, hotspotLogs, s
                 </div>
 
                 <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => setShowPdfExport(true)}
+                        className="p-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-colors border border-slate-700"
+                        title="Print / Export PDF"
+                    >
+                        <TableIcon size={18} />
+                    </button>
                     <LiveClock />
                     <StatusBadge level={stats.riskLevel} />
                 </div>
@@ -427,8 +437,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ activities, hotspotLogs, s
                         <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
                             <div
                                 className={`h-full rounded-full transition-all duration-500 ${kpiStats.preHotspotRate >= 70 ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' :
-                                        kpiStats.preHotspotRate >= 50 ? 'bg-gradient-to-r from-amber-600 to-amber-400' :
-                                            'bg-gradient-to-r from-red-600 to-red-400'
+                                    kpiStats.preHotspotRate >= 50 ? 'bg-gradient-to-r from-amber-600 to-amber-400' :
+                                        'bg-gradient-to-r from-red-600 to-red-400'
                                     }`}
                                 style={{ width: `${kpiStats.preHotspotRate}%` }}
                             />
@@ -649,6 +659,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ activities, hotspotLogs, s
                     </table>
                 </div>
             </div>
-        </div>
+
+
+            {/* PDF Export Modal */}
+            {
+                showPdfExport && (
+                    <DashboardPdfExport
+                        stats={stats}
+                        kpiStats={kpiStats}
+                        activities={activities}
+                        aiAdvice={aiAdvice}
+                        settings={settings}
+                        onClose={() => setShowPdfExport(false)}
+                    />
+                )
+            }
+        </div >
     );
 };
