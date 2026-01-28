@@ -64,6 +64,7 @@ export interface AppSettings {
   logoUrl: string; // URL or Base64
   themeColor: 'orange' | 'blue' | 'green' | 'red' | 'slate';
   categories: CategoryItem[]; // Dynamic list of categories
+  kpiSettings?: KpiSettings; // KPI targets and previous year data
 }
 
 export interface DashboardStats {
@@ -78,4 +79,54 @@ export interface ApiResponse<T> {
   message?: string;
   action?: string;
   id?: string;
+}
+
+// ===== FIRE INCIDENT TRACKING SYSTEM =====
+
+// ประเภทการตอบสนอง
+export enum FireResponseType {
+  PRE_HOTSPOT = 'PRE_HOTSPOT',   // พบก่อน Hotspot ขึ้น (ความสำเร็จ!)
+  POST_HOTSPOT = 'POST_HOTSPOT', // เข้าดับหลัง Hotspot ขึ้น
+}
+
+// แหล่งที่ได้รับข่าว
+export enum FireAlertSource {
+  PATROL = 'PATROL',        // ลาดตระเวนพบเอง
+  VILLAGER = 'VILLAGER',    // ชาวบ้านแจ้ง
+  SMOKE = 'SMOKE',          // เห็นควัน/เปลว
+  SATELLITE = 'SATELLITE',  // ดาวเทียม Hotspot
+}
+
+// บันทึกเหตุไฟ
+export interface FireIncident {
+  id: string;
+  date: string;                    // วันที่พบเหตุ
+  time?: string;                   // เวลาพบเหตุ (HH:mm)
+  location?: LocationData;         // พิกัด
+  locationName?: string;           // ชื่อบริเวณ (เช่น "แนวกันไฟ ก.3")
+
+  alertSource: FireAlertSource;    // แหล่งที่รับแจ้ง
+  responseType: FireResponseType;  // Pre หรือ Post Hotspot
+
+  linkedHotspotId?: string;        // เชื่อมกับ HotspotLog (ถ้ามี)
+
+  responseTime?: string;           // เวลาเริ่มปฏิบัติการ (HH:mm)
+  controlTime?: string;            // เวลาควบคุมเพลิงได้ (HH:mm)
+
+  areaDamaged?: number;            // พื้นที่เสียหาย (ไร่)
+  personnelCount?: number;         // กำลังพลที่ใช้
+
+  imageUrls?: string[];            // รูปภาพหลักฐาน
+  remark?: string;                 // หมายเหตุ
+
+  areaName: 'erawan' | 'salakpra'; // พื้นที่รับผิดชอบ
+}
+
+// KPI Settings
+export interface KpiSettings {
+  hotspotReductionTarget: number;   // % เป้าหมายลด Hotspot (default: 30)
+  burnAreaReductionTarget: number;  // % เป้าหมายลดพื้นที่เผา (default: 40)
+  previousYearHotspots: number;     // จำนวน Hotspot ปีก่อน (รวมทั้งปี)
+  previousYearBurnArea: number;     // พื้นที่เผาปีก่อน (ไร่)
+  fireSeasonYear: number;           // ปีฤดูไฟป่าปัจจุบัน (พ.ศ.)
 }
