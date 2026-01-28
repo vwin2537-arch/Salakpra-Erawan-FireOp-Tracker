@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { ActivityForm } from './components/ActivityForm';
@@ -7,10 +7,10 @@ import { HistoryList } from './components/HistoryList';
 import { PresentationView } from './components/PresentationView';
 import { HotspotManager } from './components/HotspotManager';
 import { SettingsView } from './components/SettingsView';
-import { PRReportView } from './components/PRReportView'; // Import
+import { PRReportView } from './components/PRReportView';
 import { ActivityLog, OperationalPhase, HotspotLog, AppSettings } from './types';
 import { apiService } from './services/apiService';
-import { Loader, Cloud, WifiOff, Image as ImageIcon, Menu } from 'lucide-react';
+import { Loader, Cloud, WifiOff, Image as ImageIcon, Menu, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 
 const DEFAULT_SETTINGS: AppSettings = {
     systemName: 'สถานีไฟป่า',
@@ -30,287 +30,392 @@ const DEFAULT_SETTINGS: AppSettings = {
     ]
 };
 
+// =============== SYNC STATUS TYPES ===============
+type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
+
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [editingActivity, setEditingActivity] = useState<ActivityLog | null>(null);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
-  // Data States
-  const [activities, setActivities] = useState<ActivityLog[]>([]);
-  const [hotspotLogs, setHotspotLogs] = useState<HotspotLog[]>([]);
-  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+    const [activeTab, setActiveTab] = useState('dashboard');
+    const [editingActivity, setEditingActivity] = useState<ActivityLog | null>(null);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // UI States
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    // Data States
+    const [activities, setActivities] = useState<ActivityLog[]>([]);
+    const [hotspotLogs, setHotspotLogs] = useState<HotspotLog[]>([]);
+    const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
-  // INITIAL DATA FETCH
-  useEffect(() => {
-    const fetchData = async () => {
-        setIsLoading(true);
-        setErrorMsg(null);
-        try {
-            // Fetch data in parallel
-            const [fetchedActivities, fetchedHotspots, fetchedSettings] = await Promise.all([
-                apiService.getActivities(),
-                apiService.getHotspots(),
-                apiService.getSettings()
-            ]);
+    // UI States - NEW: Non-blocking sync indicator
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
+    const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+    const [syncMessage, setSyncMessage] = useState<string>('');
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-            // Ensure arrays (API might return null/error if sheet empty)
-            setActivities(Array.isArray(fetchedActivities) ? fetchedActivities : []);
-            setHotspotLogs(Array.isArray(fetchedHotspots) ? fetchedHotspots : []);
-            
-            if (fetchedSettings) {
-                // Merge defaults with fetched to ensure categories exist
-                setAppSettings(prev => ({ ...prev, ...fetchedSettings }));
+    // =============== STALE-WHILE-REVALIDATE DATA FETCH ===============
+    useEffect(() => {
+        const loadData = async () => {
+            setErrorMsg(null);
+
+            // STEP 1: Load from cache IMMEDIATELY (Stale)
+            const cachedActivities = apiService.getActivitiesCached();
+            const cachedHotspots = apiService.getHotspotsCached();
+            const cachedSettings = apiService.getSettingsCached();
+
+            if (cachedActivities) setActivities(cachedActivities);
+            if (cachedHotspots) setHotspotLogs(cachedHotspots);
+            if (cachedSettings) setAppSettings(prev => ({ ...prev, ...cachedSettings }));
+
+            // If we have cached data, hide the initial loading screen immediately
+            if (cachedActivities && cachedHotspots) {
+                setIsInitialLoad(false);
             }
-        } catch (err: any) {
-            console.error("Failed to load data", err);
-            // Show specific error message if possible
-            setErrorMsg(err.message || "ไม่สามารถเชื่อมต่อกับฐานข้อมูลได้");
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
-    fetchData();
-  }, []);
+            // STEP 2: Revalidate in background
+            setSyncStatus('syncing');
+            setSyncMessage('กำลังอัปเดตข้อมูลล่าสุด...');
 
-  const handleSaveActivity = async (activityData: ActivityLog) => {
-    setIsSyncing(true);
-    try {
+            try {
+                const [fetchedActivities, fetchedHotspots, fetchedSettings] = await Promise.all([
+                    apiService.getActivities(),
+                    apiService.getHotspots(),
+                    apiService.getSettings()
+                ]);
+
+                // Update with fresh data
+                setActivities(Array.isArray(fetchedActivities) ? fetchedActivities : []);
+                setHotspotLogs(Array.isArray(fetchedHotspots) ? fetchedHotspots : []);
+
+                if (fetchedSettings) {
+                    setAppSettings(prev => ({ ...prev, ...fetchedSettings }));
+                }
+
+                setSyncStatus('success');
+                setSyncMessage('ข้อมูลล่าสุดแล้ว');
+
+                // Hide success message after 2 seconds
+                setTimeout(() => setSyncStatus('idle'), 2000);
+            } catch (err: any) {
+                console.error("Failed to load data", err);
+
+                // If we had cache, show as warning (data might be stale)
+                if (cachedActivities || cachedHotspots) {
+                    setSyncStatus('error');
+                    setSyncMessage('ไม่สามารถอัปเดตข้อมูล (แสดงข้อมูลเก่า)');
+                    setTimeout(() => setSyncStatus('idle'), 5000);
+                } else {
+                    // No cache = critical error
+                    setErrorMsg(err.message || "ไม่สามารถเชื่อมต่อกับฐานข้อมูลได้");
+                }
+            } finally {
+                setIsInitialLoad(false);
+            }
+        };
+
+        loadData();
+    }, []);
+
+    // =============== OPTIMISTIC SAVE HANDLERS ===============
+    const handleSaveActivity = async (activityData: ActivityLog) => {
         const isUpdate = !!editingActivity;
-        await apiService.saveActivity(activityData, isUpdate);
-        
-        // Optimistic Update (Refresh UI immediately)
+
+        // OPTIMISTIC: Update UI immediately
         if (isUpdate) {
             setActivities(prev => prev.map(a => a.id === activityData.id ? activityData : a));
             setEditingActivity(null);
         } else {
             setActivities(prev => [activityData, ...prev]);
         }
-        
         setActiveTab('history');
-    } catch (err: any) {
-        alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' + err.message);
-    } finally {
-        setIsSyncing(false);
-    }
-  };
 
-  const handleDeleteActivity = async (id: string) => {
-      setIsSyncing(true);
-      try {
-          await apiService.deleteActivity(id);
-          setActivities(prev => prev.filter(a => a.id !== id));
-      } catch (err: any) {
-          alert('ลบข้อมูลไม่สำเร็จ: ' + err.message);
-      } finally {
-          setIsSyncing(false);
-      }
-  };
+        // Background sync
+        setSyncStatus('syncing');
+        setSyncMessage('กำลังบันทึกลง Cloud...');
 
-  const handleEditRequest = (activity: ActivityLog) => {
-      setEditingActivity(activity);
-      setActiveTab('log');
-  };
+        try {
+            await apiService.saveActivity(activityData, isUpdate);
+            setSyncStatus('success');
+            setSyncMessage('บันทึกสำเร็จ');
+            setTimeout(() => setSyncStatus('idle'), 2000);
+        } catch (err: any) {
+            setSyncStatus('error');
+            setSyncMessage('บันทึกไม่สำเร็จ: ' + err.message);
+            // Revert on failure
+            if (isUpdate) {
+                // Refetch to get original state
+                apiService.getActivities().then(setActivities);
+            } else {
+                setActivities(prev => prev.filter(a => a.id !== activityData.id));
+            }
+            setTimeout(() => setSyncStatus('idle'), 5000);
+        }
+    };
 
-  const handleCancelEdit = () => {
-      setEditingActivity(null);
-      setActiveTab('history');
-  };
+    const handleDeleteActivity = async (id: string) => {
+        // OPTIMISTIC: Remove from UI immediately
+        const backup = activities.find(a => a.id === id);
+        setActivities(prev => prev.filter(a => a.id !== id));
 
-  const handleSaveHotspot = async (newHotspot: HotspotLog) => {
-      setIsSyncing(true);
-      try {
-          await apiService.saveHotspot(newHotspot);
-          setHotspotLogs(prev => [newHotspot, ...prev]);
-      } catch (err: any) {
-          alert('บันทึก Hotspot ไม่สำเร็จ: ' + err.message);
-      } finally {
-          setIsSyncing(false);
-      }
-  };
+        setSyncStatus('syncing');
+        setSyncMessage('กำลังลบข้อมูล...');
 
-  const handleDeleteHotspot = async (id: string) => {
-      setIsSyncing(true);
-      try {
-          await apiService.deleteHotspot(id);
-          setHotspotLogs(prev => prev.filter(h => h.id !== id));
-      } catch (err: any) {
-          alert('ลบข้อมูลไม่สำเร็จ: ' + err.message);
-      } finally {
-          setIsSyncing(false);
-      }
-  };
+        try {
+            await apiService.deleteActivity(id);
+            setSyncStatus('success');
+            setSyncMessage('ลบสำเร็จ');
+            setTimeout(() => setSyncStatus('idle'), 2000);
+        } catch (err: any) {
+            setSyncStatus('error');
+            setSyncMessage('ลบไม่สำเร็จ: ' + err.message);
+            // Revert on failure
+            if (backup) setActivities(prev => [...prev, backup]);
+            setTimeout(() => setSyncStatus('idle'), 5000);
+        }
+    };
 
-  const handleSaveSettings = async (newSettings: AppSettings) => {
-      setIsSyncing(true);
-      try {
-          await apiService.saveSettings(newSettings);
-          setAppSettings(newSettings);
-      } catch (err: any) {
-          alert('บันทึกการตั้งค่าไม่สำเร็จ: ' + err.message);
-      } finally {
-          setIsSyncing(false);
-      }
-  };
+    const handleEditRequest = (activity: ActivityLog) => {
+        setEditingActivity(activity);
+        setActiveTab('log');
+    };
 
-  const handleFactoryReset = async () => {
-      // Confirm is handled in SettingsView with PIN
-      setIsSyncing(true);
-      try {
-          await apiService.factoryReset();
-          setActivities([]);
-          setHotspotLogs([]);
-          setAppSettings(DEFAULT_SETTINGS);
-          alert('ล้างข้อมูลระบบเรียบร้อยแล้ว');
-          setActiveTab('dashboard');
-      } catch (err: any) {
-          alert('ล้างข้อมูลไม่สำเร็จ: ' + err.message);
-      } finally {
-          setIsSyncing(false);
-      }
-  };
+    const handleCancelEdit = () => {
+        setEditingActivity(null);
+        setActiveTab('history');
+    };
 
-  // Get main background style based on theme
-  const getMainBg = () => {
-    switch(appSettings.themeColor) {
-        case 'blue': return 'bg-blue-50/30';
-        case 'green': return 'bg-green-50/30';
-        case 'red': return 'bg-red-50/30';
-        case 'slate': return 'bg-slate-50/30';
-        default: return 'bg-orange-50/30';
-    }
-  };
+    const handleSaveHotspot = async (newHotspot: HotspotLog) => {
+        // OPTIMISTIC
+        setHotspotLogs(prev => [newHotspot, ...prev]);
 
-  const renderContent = () => {
-    if (isLoading) {
+        setSyncStatus('syncing');
+        setSyncMessage('กำลังบันทึก Hotspot...');
+
+        try {
+            await apiService.saveHotspot(newHotspot);
+            setSyncStatus('success');
+            setSyncMessage('บันทึก Hotspot สำเร็จ');
+            setTimeout(() => setSyncStatus('idle'), 2000);
+        } catch (err: any) {
+            setSyncStatus('error');
+            setSyncMessage('บันทึก Hotspot ไม่สำเร็จ');
+            setHotspotLogs(prev => prev.filter(h => h.id !== newHotspot.id));
+            setTimeout(() => setSyncStatus('idle'), 5000);
+        }
+    };
+
+    const handleDeleteHotspot = async (id: string) => {
+        const backup = hotspotLogs.find(h => h.id === id);
+        setHotspotLogs(prev => prev.filter(h => h.id !== id));
+
+        setSyncStatus('syncing');
+        setSyncMessage('กำลังลบ Hotspot...');
+
+        try {
+            await apiService.deleteHotspot(id);
+            setSyncStatus('success');
+            setSyncMessage('ลบ Hotspot สำเร็จ');
+            setTimeout(() => setSyncStatus('idle'), 2000);
+        } catch (err: any) {
+            setSyncStatus('error');
+            setSyncMessage('ลบ Hotspot ไม่สำเร็จ');
+            if (backup) setHotspotLogs(prev => [...prev, backup]);
+            setTimeout(() => setSyncStatus('idle'), 5000);
+        }
+    };
+
+    const handleSaveSettings = async (newSettings: AppSettings) => {
+        // OPTIMISTIC
+        const backup = appSettings;
+        setAppSettings(newSettings);
+
+        setSyncStatus('syncing');
+        setSyncMessage('กำลังบันทึกการตั้งค่า...');
+
+        try {
+            await apiService.saveSettings(newSettings);
+            setSyncStatus('success');
+            setSyncMessage('บันทึกการตั้งค่าสำเร็จ');
+            setTimeout(() => setSyncStatus('idle'), 2000);
+        } catch (err: any) {
+            setSyncStatus('error');
+            setSyncMessage('บันทึกการตั้งค่าไม่สำเร็จ');
+            setAppSettings(backup);
+            setTimeout(() => setSyncStatus('idle'), 5000);
+        }
+    };
+
+    const handleFactoryReset = async () => {
+        setSyncStatus('syncing');
+        setSyncMessage('กำลังล้างข้อมูลระบบ...');
+
+        try {
+            await apiService.factoryReset();
+            setActivities([]);
+            setHotspotLogs([]);
+            setAppSettings(DEFAULT_SETTINGS);
+            setSyncStatus('success');
+            setSyncMessage('ล้างข้อมูลระบบเรียบร้อยแล้ว');
+            setActiveTab('dashboard');
+            setTimeout(() => setSyncStatus('idle'), 2000);
+        } catch (err: any) {
+            setSyncStatus('error');
+            setSyncMessage('ล้างข้อมูลไม่สำเร็จ: ' + err.message);
+            setTimeout(() => setSyncStatus('idle'), 5000);
+        }
+    };
+
+    // Get main background style based on theme
+    const getMainBg = () => {
+        switch (appSettings.themeColor) {
+            case 'blue': return 'bg-blue-50/30';
+            case 'green': return 'bg-green-50/30';
+            case 'red': return 'bg-red-50/30';
+            case 'slate': return 'bg-slate-50/30';
+            default: return 'bg-orange-50/30';
+        }
+    };
+
+    // =============== SYNC STATUS INDICATOR (NON-BLOCKING) ===============
+    const renderSyncIndicator = () => {
+        if (syncStatus === 'idle') return null;
+
+        const getStyles = () => {
+            switch (syncStatus) {
+                case 'syncing':
+                    return 'bg-blue-500/90 text-white';
+                case 'success':
+                    return 'bg-emerald-500/90 text-white';
+                case 'error':
+                    return 'bg-red-500/90 text-white';
+                default:
+                    return 'bg-slate-500/90 text-white';
+            }
+        };
+
+        const getIcon = () => {
+            switch (syncStatus) {
+                case 'syncing':
+                    return <RefreshCw size={16} className="animate-spin" />;
+                case 'success':
+                    return <CheckCircle2 size={16} />;
+                case 'error':
+                    return <AlertCircle size={16} />;
+                default:
+                    return null;
+            }
+        };
+
         return (
-            <div className="h-screen flex flex-col items-center justify-center text-slate-400 gap-4">
-                <Loader size={48} className="animate-spin text-orange-500"/>
-                <p className="animate-pulse">กำลังเชื่อมต่อฐานข้อมูล...</p>
-                <p className="text-xs text-slate-300">Google Sheets API</p>
+            <div className={`fixed bottom-4 right-4 z-[100] px-4 py-2.5 rounded-full shadow-lg backdrop-blur-sm flex items-center gap-2 text-sm font-medium transition-all duration-300 animate-fade-in ${getStyles()}`}>
+                {getIcon()}
+                <span>{syncMessage}</span>
             </div>
         );
-    }
+    };
 
-    if (errorMsg) {
-        return (
-            <div className="h-screen flex flex-col items-center justify-center text-red-500 gap-4 p-8 text-center">
-                <div className="p-4 bg-red-50 rounded-full">
-                    <WifiOff size={48} />
+    const renderContent = () => {
+        // Initial loading - only show if NO cache is available
+        if (isInitialLoad && activities.length === 0 && hotspotLogs.length === 0) {
+            return (
+                <div className="h-screen flex flex-col items-center justify-center text-slate-400 gap-4">
+                    <Loader size={48} className="animate-spin text-orange-500" />
+                    <p className="animate-pulse">กำลังเชื่อมต่อฐานข้อมูล...</p>
+                    <p className="text-xs text-slate-300">Google Sheets API</p>
                 </div>
-                <h3 className="text-xl font-bold text-slate-700">การเชื่อมต่อล้มเหลว</h3>
-                <div className="bg-slate-100 p-4 rounded-lg max-w-md overflow-auto">
-                    <p className="text-sm font-mono text-red-600 break-all">{errorMsg}</p>
-                </div>
-                <div className="text-slate-500 text-sm space-y-1">
-                    <p>สาเหตุที่เป็นไปได้:</p>
-                    <ul className="list-disc list-inside text-xs text-slate-400">
-                        <li>คุณลืมตั้งค่าสิทธิ์ Deployment เป็น <b>"Anyone (ทุกคน)"</b></li>
-                        <li>URL ของ Google Apps Script ผิดพลาด</li>
-                        <li>เบราว์เซอร์บล็อกการเชื่อมต่อ (CORS)</li>
-                    </ul>
-                </div>
-                <button onClick={() => window.location.reload()} className="px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors shadow-lg">
-                    ลองเชื่อมต่อใหม่
-                </button>
-            </div>
-        );
-    }
+            );
+        }
 
-    switch (activeTab) {
-      case 'dashboard':
-        return <Dashboard activities={activities} hotspotLogs={hotspotLogs} settings={appSettings} />;
-      case 'hotspot':
-        return <HotspotManager logs={hotspotLogs} onSave={handleSaveHotspot} onDelete={handleDeleteHotspot} />;
-      case 'log':
-        return (
-            <ActivityForm 
-                onSave={handleSaveActivity} 
-                initialData={editingActivity}
-                onCancel={handleCancelEdit}
+        if (errorMsg) {
+            return (
+                <div className="h-screen flex flex-col items-center justify-center text-red-500 gap-4 p-8 text-center">
+                    <div className="p-4 bg-red-50 rounded-full">
+                        <WifiOff size={48} />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-700">การเชื่อมต่อล้มเหลว</h3>
+                    <div className="bg-slate-100 p-4 rounded-lg max-w-md overflow-auto">
+                        <p className="text-sm font-mono text-red-600 break-all">{errorMsg}</p>
+                    </div>
+                    <div className="text-slate-500 text-sm space-y-1">
+                        <p>สาเหตุที่เป็นไปได้:</p>
+                        <ul className="list-disc list-inside text-xs text-slate-400">
+                            <li>คุณลืมตั้งค่าสิทธิ์ Deployment เป็น <b>"Anyone (ทุกคน)"</b></li>
+                            <li>URL ของ Google Apps Script ผิดพลาด</li>
+                            <li>เบราว์เซอร์บล็อกการเชื่อมต่อ (CORS)</li>
+                        </ul>
+                    </div>
+                    <button onClick={() => window.location.reload()} className="px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors shadow-lg">
+                        ลองเชื่อมต่อใหม่
+                    </button>
+                </div>
+            );
+        }
+
+        switch (activeTab) {
+            case 'dashboard':
+                return <Dashboard activities={activities} hotspotLogs={hotspotLogs} settings={appSettings} />;
+            case 'hotspot':
+                return <HotspotManager logs={hotspotLogs} onSave={handleSaveHotspot} onDelete={handleDeleteHotspot} />;
+            case 'log':
+                return (
+                    <ActivityForm
+                        onSave={handleSaveActivity}
+                        initialData={editingActivity}
+                        onCancel={handleCancelEdit}
+                        settings={appSettings}
+                    />
+                );
+            case 'history':
+                return (
+                    <HistoryList
+                        activities={activities}
+                        onEdit={handleEditRequest}
+                        onDelete={handleDeleteActivity}
+                        settings={appSettings}
+                    />
+                );
+            case 'presentation':
+                return <PresentationView activities={activities} hotspotLogs={hotspotLogs} settings={appSettings} />;
+            case 'pr_report':
+                return <PRReportView activities={activities} settings={appSettings} />;
+            case 'settings':
+                return (
+                    <SettingsView
+                        settings={appSettings}
+                        onSave={handleSaveSettings}
+                        existingActivities={activities}
+                        onFactoryReset={handleFactoryReset}
+                    />
+                );
+            default:
+                return <Dashboard activities={activities} hotspotLogs={hotspotLogs} settings={appSettings} />;
+        }
+    };
+
+    return (
+        <div className="flex">
+            <Sidebar
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
                 settings={appSettings}
+                isOpen={isMobileMenuOpen}
+                onClose={() => setIsMobileMenuOpen(false)}
             />
-        );
-      case 'history':
-        return (
-            <HistoryList 
-                activities={activities} 
-                onEdit={handleEditRequest} 
-                onDelete={handleDeleteActivity}
-                settings={appSettings} 
-            />
-        );
-      case 'presentation':
-        return <PresentationView activities={activities} hotspotLogs={hotspotLogs} settings={appSettings} />;
-      case 'pr_report': // NEW CASE
-        return <PRReportView activities={activities} settings={appSettings} />;
-      case 'settings':
-        return (
-            <SettingsView 
-                settings={appSettings} 
-                onSave={handleSaveSettings} 
-                existingActivities={activities}
-                onFactoryReset={handleFactoryReset}
-            />
-        );
-      default:
-        return <Dashboard activities={activities} hotspotLogs={hotspotLogs} settings={appSettings} />;
-    }
-  };
 
-  return (
-    <div className="flex">
-      <Sidebar 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        settings={appSettings}
-        isOpen={isMobileMenuOpen}
-        onClose={() => setIsMobileMenuOpen(false)}
-      />
-      
-      <main className={`w-full min-h-screen transition-colors duration-500 ${getMainBg()} relative md:ml-64`}>
-        
-        {!isLoading && !errorMsg && (
-            <button 
-                onClick={() => setIsMobileMenuOpen(true)}
-                className="md:hidden fixed top-4 left-4 z-40 p-2.5 bg-white/80 backdrop-blur-sm rounded-xl shadow-lg text-slate-700 border border-slate-200 hover:bg-white transition-colors"
-            >
-                <Menu size={24} />
-            </button>
-        )}
+            <main className={`w-full min-h-screen transition-colors duration-500 ${getMainBg()} relative md:ml-64`}>
 
-        {renderContent()}
-        
-        {/* Syncing Overlay */}
-        {isSyncing && (
-            <div className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[200] flex items-center justify-center">
-                <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-3 animate-scale-up max-w-sm w-full text-center">
-                    <div className="relative">
-                        <Cloud className="text-blue-500 animate-bounce" size={40} />
-                        <ImageIcon className="text-blue-400 absolute -bottom-1 -right-1 animate-pulse" size={20} />
-                    </div>
-                    <div>
-                        <p className="font-bold text-slate-700 text-lg">กำลังบันทึกลงโฟลเดอร์ Picture...</p>
-                        <p className="text-sm text-slate-500 mt-1">
-                            ระบบกำลังสร้างโฟลเดอร์แยกตามชื่อเรื่อง<br/>
-                            และอัปโหลดรูปภาพเข้า Drive<br/>
-                            <span className="text-xs text-slate-400">(อาจใช้เวลาสักครู่เพื่อจัดระเบียบไฟล์)</span>
-                        </p>
-                    </div>
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-blue-500 animate-progress-indeterminate"></div>
-                    </div>
-                </div>
-            </div>
-        )}
-      </main>
-    </div>
-  );
+                {!isInitialLoad && !errorMsg && (
+                    <button
+                        onClick={() => setIsMobileMenuOpen(true)}
+                        className="md:hidden fixed top-4 left-4 z-40 p-2.5 bg-white/80 backdrop-blur-sm rounded-xl shadow-lg text-slate-700 border border-slate-200 hover:bg-white transition-colors"
+                    >
+                        <Menu size={24} />
+                    </button>
+                )}
+
+                {renderContent()}
+
+                {/* NEW: Non-blocking Sync Status Indicator */}
+                {renderSyncIndicator()}
+            </main>
+        </div>
+    );
 };
 
 export default App;
