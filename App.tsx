@@ -404,7 +404,7 @@ const App: React.FC = () => {
 
         switch (activeTab) {
             case 'dashboard':
-                return <Dashboard activities={activities} hotspotLogs={hotspotLogs} settings={appSettings} />;
+                return <Dashboard activities={activities} hotspotLogs={hotspotLogs} settings={appSettings} fireIncidents={fireIncidents} />;
             case 'hotspot':
                 return <HotspotManager logs={hotspotLogs} onSave={handleSaveHotspot} onDelete={handleDeleteHotspot} />;
             case 'log':
@@ -434,6 +434,7 @@ const App: React.FC = () => {
                     <FireIncidentLog
                         incidents={fireIncidents}
                         hotspotLogs={hotspotLogs}
+                        settings={appSettings}
                         onSave={handleSaveFireIncidents}
                         onDelete={handleDeleteFireIncident}
                     />

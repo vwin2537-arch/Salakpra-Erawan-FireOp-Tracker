@@ -1,5 +1,5 @@
 
-import { ActivityLog, HotspotLog, AppSettings, ApiResponse } from '../types';
+import { ActivityLog, HotspotLog, AppSettings, ApiResponse, FireIncident } from '../types';
 
 // THE PROVIDED GOOGLE APPS SCRIPT WEB APP URL
 // Ensure you have Deployed as "Me" and Access "Anyone"
@@ -11,6 +11,7 @@ const CACHE_KEYS = {
     activities: 'fireop_cache_activities',
     hotspots: 'fireop_cache_hotspots',
     settings: 'fireop_cache_settings',
+    fireIncidents: 'fireop_cache_fire_incidents',
     timestamp: 'fireop_cache_timestamp'
 };
 
@@ -230,6 +231,45 @@ export const apiService = {
             action: action,
             sheet: 'Settings',
             data: data
+        });
+    },
+
+    // --- FIRE INCIDENTS ---
+    getFireIncidents: async (): Promise<FireIncident[]> => {
+        const res = await sendRequest('POST', { action: 'getFireIncidents' });
+        let incidents: FireIncident[] = [];
+        if (res.data && Array.isArray(res.data)) {
+            incidents = res.data;
+        } else if (Array.isArray(res)) {
+            incidents = res;
+        }
+        setToCache(CACHE_KEYS.fireIncidents, incidents);
+        return incidents;
+    },
+
+    getFireIncidentsCached: (): FireIncident[] | null => {
+        return getFromCache<FireIncident[]>(CACHE_KEYS.fireIncidents);
+    },
+
+    saveFireIncident: async (incident: FireIncident, isUpdate: boolean = false): Promise<ApiResponse<any>> => {
+        return await sendRequest('POST', {
+            action: 'saveFireIncident',
+            data: incident,
+            isUpdate: isUpdate
+        });
+    },
+
+    saveFireIncidentsBatch: async (incidents: FireIncident[]): Promise<ApiResponse<any>> => {
+        return await sendRequest('POST', {
+            action: 'saveFireIncidentsBatch',
+            data: incidents
+        });
+    },
+
+    deleteFireIncident: async (id: string): Promise<ApiResponse<any>> => {
+        return await sendRequest('POST', {
+            action: 'deleteFireIncident',
+            id: id
         });
     },
 

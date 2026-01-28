@@ -64,6 +64,7 @@ export interface AppSettings {
   logoUrl: string; // URL or Base64
   themeColor: 'orange' | 'blue' | 'green' | 'red' | 'slate';
   categories: CategoryItem[]; // Dynamic list of categories
+  kpiSettings?: KpiSettings; // KPI targets and previous year data
 }
 
 export interface DashboardStats {

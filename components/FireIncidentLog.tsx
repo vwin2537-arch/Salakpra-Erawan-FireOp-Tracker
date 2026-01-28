@@ -1,16 +1,18 @@
 
 import React, { useState, useMemo, useRef } from 'react';
-import { FireIncident, FireAlertSource, FireResponseType, HotspotLog, LocationData } from '../types';
+import { FireIncident, FireAlertSource, FireResponseType, HotspotLog, LocationData, AppSettings } from '../types';
 import {
     Flame, Plus, Trash2, Save, Clock, MapPin, Users,
     Zap, Radio, Eye, Satellite, Link2, AlertTriangle,
     CheckCircle, XCircle, ChevronDown, TreePine, Map,
-    Image as ImageIcon, X, Target
+    Image as ImageIcon, X, Target, FileDown
 } from 'lucide-react';
+import { FireStatsPdfExport } from './FireStatsPdfExport';
 
 interface FireIncidentLogProps {
     incidents: FireIncident[];
     hotspotLogs: HotspotLog[];
+    settings: AppSettings;
     onSave: (incidents: FireIncident[]) => void;
     onDelete: (id: string) => void;
 }
@@ -40,6 +42,7 @@ const createEmptyIncident = (date: string, areaName: 'erawan' | 'salakpra'): Omi
 export const FireIncidentLog: React.FC<FireIncidentLogProps> = ({
     incidents,
     hotspotLogs,
+    settings,
     onSave,
     onDelete
 }) => {
@@ -50,6 +53,7 @@ export const FireIncidentLog: React.FC<FireIncidentLogProps> = ({
         createEmptyIncident(selectedDate, selectedArea)
     ]);
     const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+    const [showPdfExport, setShowPdfExport] = useState(false);
 
     // Get hotspots for selected date
     const hotspotsForDate = useMemo(() => {
@@ -248,6 +252,13 @@ export const FireIncidentLog: React.FC<FireIncidentLogProps> = ({
                         <p className="text-2xl font-bold text-emerald-400 font-mono">{stats.preRate}%</p>
                         <p className="text-xs text-emerald-400">PRE-SPOT</p>
                     </div>
+                    <button
+                        onClick={() => setShowPdfExport(true)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl border border-orange-500/30 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors"
+                    >
+                        <FileDown size={18} />
+                        <span className="text-xs font-bold">PDF</span>
+                    </button>
                 </div>
             </div>
 
@@ -440,6 +451,17 @@ export const FireIncidentLog: React.FC<FireIncidentLogProps> = ({
                                         value={incident.areaDamaged || ''}
                                         onChange={e => handleIncidentChange(index, 'areaDamaged', Number(e.target.value))}
                                         className="w-full rounded-lg px-3 py-2 text-sm bg-slate-800/50 border border-slate-600 text-white"
+                                    />
+                                </div>
+
+                                {/* Control/Extinguished Time */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-400 mb-1">⏱️ เวลาดับเสร็จ</label>
+                                    <input
+                                        type="time"
+                                        value={incident.controlTime || ''}
+                                        onChange={e => handleIncidentChange(index, 'controlTime', e.target.value)}
+                                        className="w-full rounded-lg px-3 py-2 text-sm bg-slate-800/50 border border-slate-600 text-white [color-scheme:dark]"
                                     />
                                 </div>
 
@@ -651,6 +673,16 @@ export const FireIncidentLog: React.FC<FireIncidentLogProps> = ({
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* PDF Export Modal */}
+            {showPdfExport && (
+                <FireStatsPdfExport
+                    fireIncidents={incidents}
+                    hotspotLogs={hotspotLogs}
+                    settings={settings}
+                    onClose={() => setShowPdfExport(false)}
+                />
             )}
         </div>
     );

@@ -3,14 +3,15 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Area, AreaChart
 } from 'recharts';
-import { ActivityLog, OperationalPhase, ActivityCategory, HotspotLog, AppSettings } from '../types';
+import { ActivityLog, OperationalPhase, ActivityCategory, HotspotLog, AppSettings, FireIncident, FireResponseType } from '../types';
 import { generateStrategicAdvice } from '../services/geminiService';
-import { Sparkles, TrendingUp, Flame, ShieldCheck, Users, Table as TableIcon, AlertTriangle, ThermometerSun, Clock, Zap, Activity, Terminal } from 'lucide-react';
+import { Sparkles, TrendingUp, Flame, ShieldCheck, Users, Table as TableIcon, AlertTriangle, ThermometerSun, Clock, Zap, Activity, Terminal, Target, TrendingDown, CheckCircle } from 'lucide-react';
 
 interface DashboardProps {
     activities: ActivityLog[];
     hotspotLogs: HotspotLog[];
     settings: AppSettings;
+    fireIncidents?: FireIncident[];
 }
 
 // Command Center Color Palette
@@ -126,7 +127,7 @@ const LiveClock: React.FC = () => {
     );
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ activities, hotspotLogs, settings }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ activities, hotspotLogs, settings, fireIncidents = [] }) => {
     const [aiAdvice, setAiAdvice] = useState<string | null>(null);
     const [loadingAi, setLoadingAi] = useState(false);
 
@@ -213,6 +214,47 @@ export const Dashboard: React.FC<DashboardProps> = ({ activities, hotspotLogs, s
 
         return { totalFireArea, totalPersonnel, totalHotspots, matrixData, monthlyData, categoryData, riskLevel };
     }, [activities, hotspotLogs, settings.categories]);
+
+    // KPI Stats Calculation
+    const kpiStats = useMemo(() => {
+        const kpi = settings.kpiSettings;
+
+        // Fire Incident stats
+        const preHotspot = fireIncidents.filter(i => i.responseType === FireResponseType.PRE_HOTSPOT).length;
+        const postHotspot = fireIncidents.filter(i => i.responseType === FireResponseType.POST_HOTSPOT).length;
+        const totalIncidents = fireIncidents.length;
+        const preHotspotRate = totalIncidents > 0 ? Math.round((preHotspot / totalIncidents) * 100) : 0;
+
+        // Hotspot comparison
+        const previousYearHotspots = kpi?.previousYearHotspots || 0;
+        const currentYearHotspots = stats.totalHotspots;
+        const hotspotReductionTarget = kpi?.hotspotReductionTarget || 30;
+        const targetHotspots = Math.round(previousYearHotspots * (1 - hotspotReductionTarget / 100));
+        const hotspotProgress = previousYearHotspots > 0
+            ? Math.round(((previousYearHotspots - currentYearHotspots) / previousYearHotspots) * 100)
+            : 0;
+        const hotspotOnTrack = currentYearHotspots <= targetHotspots;
+
+        // Burn area comparison
+        const previousYearBurnArea = kpi?.previousYearBurnArea || 0;
+        const burnAreaReductionTarget = kpi?.burnAreaReductionTarget || 40;
+
+        return {
+            preHotspot,
+            postHotspot,
+            totalIncidents,
+            preHotspotRate,
+            previousYearHotspots,
+            currentYearHotspots,
+            hotspotReductionTarget,
+            targetHotspots,
+            hotspotProgress,
+            hotspotOnTrack,
+            previousYearBurnArea,
+            burnAreaReductionTarget,
+            fireSeasonYear: kpi?.fireSeasonYear || new Date().getFullYear() + 543
+        };
+    }, [fireIncidents, stats.totalHotspots, settings.kpiSettings]);
 
     const handleGetAdvice = async () => {
         setLoadingAi(true);
@@ -361,6 +403,97 @@ export const Dashboard: React.FC<DashboardProps> = ({ activities, hotspotLogs, s
                             Ready for analysis. Click "RUN ANALYSIS" to generate strategic insights...
                         </div>
                     )}
+                </div>
+            </div>
+
+            {/* KPI Progress Section */}
+            <div className="mb-8 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Pre-Hotspot Success Rate */}
+                <div className="rounded-2xl border p-5" style={{ background: COMMAND_COLORS.cardBg, borderColor: COMMAND_COLORS.cardBorder }}>
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                            <Target className="text-emerald-500" size={20} />
+                            <h3 className="font-bold text-white text-sm">PRE-HOTSPOT SUCCESS</h3>
+                        </div>
+                        <span className={`text-2xl font-bold font-mono ${kpiStats.preHotspotRate >= 70 ? 'text-emerald-400' : kpiStats.preHotspotRate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                            {kpiStats.preHotspotRate}%
+                        </span>
+                    </div>
+                    <div className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                            <span className="text-slate-400">🟢 Pre-Hotspot: {kpiStats.preHotspot}</span>
+                            <span className="text-slate-400">🟡 Post-Hotspot: {kpiStats.postHotspot}</span>
+                        </div>
+                        <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+                            <div
+                                className={`h-full rounded-full transition-all duration-500 ${kpiStats.preHotspotRate >= 70 ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' :
+                                        kpiStats.preHotspotRate >= 50 ? 'bg-gradient-to-r from-amber-600 to-amber-400' :
+                                            'bg-gradient-to-r from-red-600 to-red-400'
+                                    }`}
+                                style={{ width: `${kpiStats.preHotspotRate}%` }}
+                            />
+                        </div>
+                        <p className="text-xs text-slate-500">พบและดับก่อน Hotspot ขึ้นดาวเทียม</p>
+                    </div>
+                </div>
+
+                {/* Hotspot vs Target */}
+                <div className="rounded-2xl border p-5" style={{ background: COMMAND_COLORS.cardBg, borderColor: COMMAND_COLORS.cardBorder }}>
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                            <TrendingDown className="text-orange-500" size={20} />
+                            <h3 className="font-bold text-white text-sm">HOTSPOT vs ปีก่อน</h3>
+                        </div>
+                        <span className={`text-2xl font-bold font-mono ${kpiStats.hotspotOnTrack ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {kpiStats.hotspotProgress > 0 ? '▼' : kpiStats.hotspotProgress < 0 ? '▲' : '='}{Math.abs(kpiStats.hotspotProgress)}%
+                        </span>
+                    </div>
+                    <div className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                            <span className="text-slate-400">ปีก่อน: {kpiStats.previousYearHotspots} จุด</span>
+                            <span className="text-white font-bold">ปัจจุบัน: {kpiStats.currentYearHotspots} จุด</span>
+                        </div>
+                        <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+                            <div
+                                className={`h-full rounded-full transition-all duration-500 ${kpiStats.hotspotOnTrack ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' : 'bg-gradient-to-r from-red-600 to-red-400'}`}
+                                style={{ width: `${Math.min(100, kpiStats.previousYearHotspots > 0 ? (kpiStats.currentYearHotspots / kpiStats.previousYearHotspots) * 100 : 0)}%` }}
+                            />
+                        </div>
+                        <div className="flex justify-between text-xs text-slate-500">
+                            <span>เป้าหมาย: ลด {kpiStats.hotspotReductionTarget}%</span>
+                            <span>Max: {kpiStats.targetHotspots} จุด</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Fire Season Status */}
+                <div className="rounded-2xl border p-5" style={{ background: COMMAND_COLORS.cardBg, borderColor: COMMAND_COLORS.cardBorder }}>
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                            <Flame className="text-amber-500" size={20} />
+                            <h3 className="font-bold text-white text-sm">ฤดูไฟ {kpiStats.fireSeasonYear}</h3>
+                        </div>
+                        {kpiStats.hotspotOnTrack ? (
+                            <span className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-500/20 px-2 py-1 rounded-full border border-emerald-500/30">
+                                <CheckCircle size={12} /> ON TRACK
+                            </span>
+                        ) : (
+                            <span className="flex items-center gap-1 text-xs font-bold text-red-400 bg-red-500/20 px-2 py-1 rounded-full border border-red-500/30">
+                                <AlertTriangle size={12} /> EXCEEDING
+                            </span>
+                        )}
+                    </div>
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                            <span className="text-xs text-slate-400">เหตุไฟทั้งหมด</span>
+                            <span className="text-lg font-bold text-white font-mono">{kpiStats.totalIncidents}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                            <span className="text-xs text-slate-400">พื้นที่เผาปีนี้</span>
+                            <span className="text-lg font-bold text-white font-mono">{stats.totalFireArea.toLocaleString()} ไร่</span>
+                        </div>
+                        <p className="text-xs text-slate-500">เป้าลดพื้นที่เผา: {kpiStats.burnAreaReductionTarget}% (จบฤดู)</p>
+                    </div>
                 </div>
             </div>
 
