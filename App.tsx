@@ -261,15 +261,10 @@ const App: React.FC = () => {
         }
     };
 
-    // Get main background style based on theme
+    // Global Dark Command Center Background
     const getMainBg = () => {
-        switch (appSettings.themeColor) {
-            case 'blue': return 'bg-blue-50/30';
-            case 'green': return 'bg-green-50/30';
-            case 'red': return 'bg-red-50/30';
-            case 'slate': return 'bg-slate-50/30';
-            default: return 'bg-orange-50/30';
-        }
+        // Always use dark Command Center theme
+        return 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900';
     };
 
     // =============== SYNC STATUS INDICATOR (NON-BLOCKING) ===============
