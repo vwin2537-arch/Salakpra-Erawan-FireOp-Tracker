@@ -4,7 +4,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Area, AreaChart
 } from 'recharts';
 import { ActivityLog, OperationalPhase, ActivityCategory, HotspotLog, AppSettings, FireIncident, FireResponseType } from '../types';
-import { generateStrategicAdvice } from '../services/geminiService';
+
 import { Sparkles, TrendingUp, Flame, ShieldCheck, Users, Table as TableIcon, AlertTriangle, ThermometerSun, Clock, Zap, Activity, Terminal, Target, TrendingDown, CheckCircle } from 'lucide-react';
 
 interface DashboardProps {
@@ -58,36 +58,7 @@ const AnimatedCounter: React.FC<{ value: number; duration?: number }> = ({ value
     return <>{displayValue.toLocaleString()}</>;
 };
 
-// Typewriter Effect Component for AI
-const TypewriterText: React.FC<{ text: string; speed?: number }> = ({ text, speed = 20 }) => {
-    const [displayText, setDisplayText] = useState('');
-    const [isComplete, setIsComplete] = useState(false);
 
-    useEffect(() => {
-        setDisplayText('');
-        setIsComplete(false);
-        let index = 0;
-
-        const interval = setInterval(() => {
-            if (index < text.length) {
-                setDisplayText(text.slice(0, index + 1));
-                index++;
-            } else {
-                setIsComplete(true);
-                clearInterval(interval);
-            }
-        }, speed);
-
-        return () => clearInterval(interval);
-    }, [text, speed]);
-
-    return (
-        <span>
-            {displayText}
-            {!isComplete && <span className="animate-pulse text-orange-500">█</span>}
-        </span>
-    );
-};
 
 // Status Badge Component
 const StatusBadge: React.FC<{ level: 'low' | 'medium' | 'high' | 'active' }> = ({ level }) => {
@@ -130,8 +101,6 @@ const LiveClock: React.FC = () => {
 import { DashboardPdfExport } from './DashboardPdfExport';
 
 export const Dashboard: React.FC<DashboardProps> = ({ activities, hotspotLogs, settings, fireIncidents = [] }) => {
-    const [aiAdvice, setAiAdvice] = useState<string | null>(null);
-    const [loadingAi, setLoadingAi] = useState(false);
     const [showPdfExport, setShowPdfExport] = useState(false);
 
     const getCategoryLabel = (id: string) => settings.categories.find(c => c.id === id)?.label || id;
@@ -259,12 +228,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activities, hotspotLogs, s
         };
     }, [fireIncidents, stats.totalHotspots, settings.kpiSettings]);
 
-    const handleGetAdvice = async () => {
-        setLoadingAi(true);
-        const advice = await generateStrategicAdvice(activities);
-        setAiAdvice(advice);
-        setLoadingAi(false);
-    };
+
 
     return (
         <div className="p-6 md:p-8 min-h-screen" style={{ background: `linear-gradient(135deg, ${COMMAND_COLORS.background} 0%, #1e293b 50%, ${COMMAND_COLORS.background} 100%)` }}>
@@ -377,44 +341,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activities, hotspotLogs, s
                 </div>
             </div>
 
-            {/* AI Strategic Analysis - Terminal Style */}
-            <div className="mb-8 rounded-2xl border overflow-hidden"
-                style={{ background: COMMAND_COLORS.cardBg, borderColor: COMMAND_COLORS.cardBorder }}>
-                <div className="px-5 py-3 border-b flex items-center justify-between"
-                    style={{ borderColor: COMMAND_COLORS.cardBorder, background: 'rgba(15, 23, 42, 0.5)' }}>
-                    <div className="flex items-center gap-2">
-                        <Terminal className="text-orange-500" size={18} />
-                        <span className="text-slate-300 font-medium text-sm">AI STRATEGIC ANALYSIS</span>
-                    </div>
-                    <button
-                        onClick={handleGetAdvice}
-                        disabled={loadingAi}
-                        className="flex items-center gap-2 bg-gradient-to-r from-orange-600 to-amber-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-lg hover:shadow-orange-500/25 transition-all disabled:opacity-50 hover:scale-105 active:scale-95"
-                    >
-                        <Sparkles size={14} />
-                        {loadingAi ? 'ANALYZING...' : 'RUN ANALYSIS'}
-                    </button>
-                </div>
-                <div className="p-5 font-mono text-sm min-h-[100px]">
-                    {loadingAi ? (
-                        <div className="flex items-center gap-2 text-orange-400">
-                            <Activity className="animate-pulse" size={16} />
-                            <span>Processing data streams...</span>
-                            <span className="animate-pulse">█</span>
-                        </div>
-                    ) : aiAdvice ? (
-                        <div className="text-slate-300 leading-relaxed">
-                            <span className="text-emerald-400">&gt; </span>
-                            <TypewriterText text={aiAdvice} speed={15} />
-                        </div>
-                    ) : (
-                        <div className="text-slate-500">
-                            <span className="text-slate-600">&gt; </span>
-                            Ready for analysis. Click "RUN ANALYSIS" to generate strategic insights...
-                        </div>
-                    )}
-                </div>
-            </div>
+
 
             {/* KPI Progress Section */}
             <div className="mb-8 grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -668,7 +595,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activities, hotspotLogs, s
                         stats={stats}
                         kpiStats={kpiStats}
                         activities={activities}
-                        aiAdvice={aiAdvice}
+                        aiAdvice={null}
                         settings={settings}
                         onClose={() => setShowPdfExport(false)}
                     />
